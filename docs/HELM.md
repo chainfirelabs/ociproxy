@@ -7,10 +7,15 @@ volumes. Do not mix legacy nodes with public-v2 nodes.
 
 ## Primary
 
+Images use [GitHub Container Registry](https://github.com/chainfirelabs/containerproxy/pkgs/container/containerproxy).
+Replace `YOUR_TAG` with a published tag. The current GitHub workflow builds only;
+these paths become pullable after image publication.
+
 ```sh
 helm install cp charts/containerproxy --namespace registry --create-namespace \
-  --set image.repository=registry.example.com/containerproxy \
-  --set ui.image.repository=registry.example.com/containerproxy-ui
+  --set image.repository=ghcr.io/chainfirelabs/containerproxy \
+  --set ui.image.repository=ghcr.io/chainfirelabs/containerproxy/ui \
+  --set image.tag=YOUR_TAG --set ui.image.tag=YOUR_TAG
 ```
 
 Defaults deploy one primary. The chart creates a local Secret and generates its
@@ -33,8 +38,9 @@ replication:
 helm install site-a charts/containerproxy --namespace registry \
   --set primary.enabled=false --set replica.enabled=true \
   --set replica.primaryUrl=https://primary.example.com \
-  --set image.repository=registry.example.com/containerproxy \
-  --set ui.image.repository=registry.example.com/containerproxy-ui
+  --set image.repository=ghcr.io/chainfirelabs/containerproxy \
+  --set ui.image.repository=ghcr.io/chainfirelabs/containerproxy/ui \
+  --set image.tag=YOUR_TAG --set ui.image.tag=YOUR_TAG
 ```
 
 The replica identity defaults to the release name (`site-a`); set

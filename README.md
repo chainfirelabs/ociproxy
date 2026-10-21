@@ -1,5 +1,7 @@
 # ContainerProxy
 
+[GitHub repository](https://github.com/chainfirelabs/containerproxy)
+
 Cache Docker/OCI images and Helm charts with a primary and optional replicas.
 
 - **Shared:** explicitly public registries and Helm repositories.
@@ -36,17 +38,18 @@ Add private sources in each node's own UI; they stay on that node.
 ## Helm
 
 Install **one node per release**. The examples below put both releases in the
-`registry` namespace. Use reachable, published builds of both images.
+`registry` namespace. Use published GHCR builds of both images.
 
-Create `images.yaml` with your image locations:
+Create `images.yaml` using the GitHub Container Registry paths below. Replace
+`YOUR_TAG` with a published tag; the current GitHub workflow builds without publishing:
 
 ```yaml
 image:
-  repository: registry.example.com/containerproxy
+  repository: ghcr.io/chainfirelabs/containerproxy
   tag: "YOUR_TAG"
 ui:
   image:
-    repository: registry.example.com/containerproxy/ui
+    repository: ghcr.io/chainfirelabs/containerproxy/ui
     tag: "YOUR_TAG"
 ```
 
