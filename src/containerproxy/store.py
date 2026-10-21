@@ -410,7 +410,7 @@ class Store:
             legacy = any(self.db.execute(f"SELECT 1 FROM {table} LIMIT 1").fetchone()
                          for table in ("users", "tokens", "sources", "manifests", "changelog", "replicas"))
         if legacy:
-            raise ValueError("legacy database requires offline isolation migration; see ISOLATION.md")
+            raise ValueError("legacy database requires offline isolation migration; see docs/ISOLATION.md")
         self.set_meta("node_isolation_schema", "2")
 
     def rebuild_public_log(self) -> None:

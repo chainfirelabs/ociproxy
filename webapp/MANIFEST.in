@@ -1,2 +1,2 @@
-include LICENSE THIRD_PARTY_NOTICES.md
+include LICENSE docs/THIRD_PARTY_NOTICES.md
 recursive-include third_party *

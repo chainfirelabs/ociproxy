@@ -19,4 +19,4 @@ Register only this release's "replication-token" with its primary under peer ID
 {{ .Values.replication.id | default .Release.Name }}. The UI never uses primary accounts.
 {{- end }}
 
-Before upgrading old volumes, stop the nodes and follow ISOLATION.md.
+Before upgrading old volumes, stop the nodes and follow docs/ISOLATION.md.

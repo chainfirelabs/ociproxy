@@ -4,7 +4,7 @@ CONTAINERPROXY_* environment overrides win over TOML. SECRET, bootstrap accounts
 private upstreams, Helm sources, access rules and managed-source settings belong
 only to this node. Public-v2 uses separate REPLICATION_ID/REPLICATION_TOKEN on
 replicas and REPLICATION_PEERS (JSON allowlist) on the primary. Sources default
-to sharing=local and visibility=private. See ISOLATION.md for migration/setup.
+to sharing=local and visibility=private. See docs/ISOLATION.md for migration/setup.
 """
 
 from __future__ import annotations

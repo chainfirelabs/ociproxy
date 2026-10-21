@@ -1,5 +1,8 @@
 # Existing authentication Secret examples
 
+Use the [primary Secret](../charts/containerproxy/examples/primary-auth-secret.example.yaml)
+and [replica Secret](../charts/containerproxy/examples/replica-auth-secret.example.yaml) templates.
+
 These files contain placeholders, not usable credentials. Copy them to a private
 location outside the repository, replace every placeholder, and adjust namespaces
 to match your releases. Generate each distinct secret/password/token independently,
@@ -44,5 +47,5 @@ these keys in the Secret itself; the chart does not populate them from values.
 
 `push-password` bootstraps the local account database. Editing it does not reset
 an existing user's password. Existing installations must follow
-[the offline migration guide](../../../ISOLATION.md#existing-deployments-explicit-offline-migration)
+[the offline migration guide](ISOLATION.md#existing-deployments-explicit-offline-migration)
 before adopting the new credentials and protocol.

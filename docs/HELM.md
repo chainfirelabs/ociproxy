@@ -2,7 +2,7 @@
 
 Deploy **one independent node per release**, with a node-local UI, accounts,
 credentials and data. Chart 0.3 changes the deployment and replication model;
-follow the repository's [ISOLATION.md](../../ISOLATION.md) before upgrading old
+follow the repository's [ISOLATION.md](ISOLATION.md) before upgrading old
 volumes. Do not mix legacy nodes with public-v2 nodes.
 
 ## Primary
@@ -76,5 +76,5 @@ Helm servers, auth/CDN hosts and any proxy. DNS rules are included automatically
 No primary-to-replica fan-out connection or credential is needed.
 
 Persistence, probes, resource limits, ingress, ServiceMonitor and OIDC settings
-are in `values.yaml`. Configure them per node/release. Registry authentication
+are in [values.yaml](../charts/containerproxy/values.yaml). Configure them per node/release. Registry authentication
 and UI identities are local even when public cached content is shared.

@@ -1,6 +1,6 @@
 # One independent node per release: primary (default) OR one replica.
 # Each release has its own local accounts, UI, secret and private sources.
-# See ISOLATION.md and this chart's README before upgrading old volumes.
+# See docs/ISOLATION.md and docs/HELM.md before upgrading old volumes.
 
 image:
   # The proxy image built from docker/Dockerfile (both roles use it).

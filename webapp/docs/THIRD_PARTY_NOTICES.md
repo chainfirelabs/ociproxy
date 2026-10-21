@@ -16,15 +16,11 @@ The UI inventory is restricted to the packages shipped by the UI.
 | --- | --- | --- |
 | anyio | 4.15.1 | MIT |
 | certifi | 2026.10.19 | MPL-2.0 |
-| cffi | 2.1.1 | MIT-0 |
 | click | 8.5.0 | BSD-3-Clause |
-| cryptography | 50.0.2 | Apache-2.0 OR BSD-3-Clause |
 | h11 | 0.16.0 | MIT |
 | httpcore | 1.0.9 | BSD-3-Clause |
 | httpx | 0.28.1 | BSD-3-Clause |
 | idna | 3.20 | BSD-3-Clause |
-| pycparser | 3.11 | BSD-3-Clause |
-| PyYAML | 6.0.3 | MIT |
 | starlette | 1.7.0 | BSD-3-Clause |
 | typing_extensions | 4.16.0 | PSF-2.0 |
 | uvicorn | 0.53.0 | BSD-3-Clause |
@@ -54,19 +50,5 @@ GPL/LGPL-covered components. Preserve `/usr/share/doc/*/copyright`,
 
 Project license and notices are in `/usr/share/licenses/containerproxy/`.
 Dependency wheel notices also remain in `/app/site-packages/*.dist-info/`.
-See the repository's `LICENSE_REVIEW.md` for exact base-image review scope and
+See the repository's [license review](../../docs/LICENSE_REVIEW.md) for exact base-image review scope and
 source-distribution requirements before publishing container binaries.
-
-## Native code and Rust source inventory
-
-The proxy's cryptography wheel includes native code and statically linked
-OpenSSL; PyYAML includes LibYAML. Supplemental native notices are in
-`third_party/licenses/native/`. `third_party/rust-inventory.json` and
-`third_party/licenses/rust/` preserve the upstream licenses from cryptography's
-complete source Cargo.lock, including build-time crates; this is deliberately
-broader than a proven list of compiled runtime crates. Crate archives were
-verified against Cargo.lock checksums. This inventory does not establish the
-complete contents of every platform's wheel; see `LICENSE_REVIEW.md`.
-
-`third_party/licenses/base/` preserves notices extracted from the reviewed
-amd64 base-image layers. They supplement the originals retained in the image.

@@ -1,4 +1,4 @@
-# Public-only sharing, independent accounts on every node. See ISOLATION.md.
+# Public-only sharing, independent accounts on every node. See docs/ISOLATION.md.
 [node]
 role = "primary"
 # Replica only:

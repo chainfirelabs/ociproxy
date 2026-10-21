@@ -14,7 +14,8 @@ WORKDIR /build
 #   uv pip compile pyproject.toml --generate-hashes --python-version 3.13 --universal -o requirements.lock)
 COPY requirements.lock ./
 RUN pip install --no-cache-dir --require-hashes --target /staged -r requirements.lock
-COPY pyproject.toml README.md LICENSE THIRD_PARTY_NOTICES.md ./
+COPY pyproject.toml README.md LICENSE ./
+COPY docs/THIRD_PARTY_NOTICES.md ./
 COPY third_party/ ./third_party/
 COPY src ./src
 RUN pip install --no-cache-dir --no-deps --target /staged . \

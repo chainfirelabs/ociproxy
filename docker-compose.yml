@@ -1,7 +1,7 @@
 # Independent primary and replicas. Only explicitly public sources replicate.
 # Each replica has its own accounts, UI secret, upstream credentials and cache.
 # Replicas have egress for their node-local Docker/Helm sources.
-# See ISOLATION.md before upgrading an existing data volume.
+# See docs/ISOLATION.md before upgrading an existing data volume.
 
 x-node-env: &node-env
   # Local primary/UI administration secret. Replicas override this value.

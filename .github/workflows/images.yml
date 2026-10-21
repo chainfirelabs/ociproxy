@@ -46,7 +46,7 @@ jobs:
         with:
           persist-credentials: false
       # Build only, consistent with the public GitLab pipeline. Public image
-      # publishing requires the binary/source release checks in LICENSE_REVIEW.md.
+      # publishing requires the binary/source release checks in docs/LICENSE_REVIEW.md.
       - name: Build image
         env:
           IMAGE: ${{ matrix.image }}
