@@ -263,6 +263,18 @@ when they reconnect. Previously public content cannot be made secret by deleting
 it later. Changing sharing scope requires delete/recreate. Helm `.prov` files are
 not proxied. The project has one public coordinator, without leader election.
 
+## GitHub image builds
+
+The public repository includes `.github/workflows/images.yml`. When GitLab mirrors
+commits or tags into a GitHub repository, GitHub Actions verifies the license
+inventories and builds the proxy and UI images. It also runs for pull requests
+and supports manual runs from the Actions tab. Enable Actions on the GitHub
+repository and ensure the mirror includes `.github/workflows/`.
+
+No registry credentials are needed. Images are built on the runner and are not
+published or retained as downloadable artifacts. Public binary distribution
+remains subject to the release checks in [LICENSE_REVIEW.md](LICENSE_REVIEW.md).
+
 ## License
 
 Copyright (c) 2026 ChainFire Labs LLC. ContainerProxy's original code is

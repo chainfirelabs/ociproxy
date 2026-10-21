@@ -47,7 +47,7 @@ x-replica: &replica
   depends_on:
     primary:
       condition: service_healthy
-  networks: [replication, edge, egress]
+  networks: [replication, egress]
 
 services:
   primary:
@@ -172,11 +172,6 @@ services:
 networks:
   replication:
     internal: true
-  edge:
-    driver_opts:
-      # Published ports still work (inbound DNAT); outbound traffic is not
-      # masqueraded, so it has no way back and the replicas have no egress.
-      com.docker.network.bridge.enable_ip_masquerade: "false"
   egress: {}
 
 volumes:

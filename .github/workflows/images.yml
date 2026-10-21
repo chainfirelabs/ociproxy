@@ -1,0 +1,63 @@
+name: Build container images
+
+on:
+  push:
+    branches: ['**']
+    tags: ['**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: images-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  licenses:
+    name: Verify license inventories
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Check project and dependency notices
+        run: python3 tools/check_licenses.py
+
+  images:
+    name: Build ${{ matrix.image }}
+    needs: licenses
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: proxy
+            dockerfile: docker/Dockerfile
+            context: .
+          - image: ui
+            dockerfile: docker/Dockerfile.ui
+            context: webapp
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      # Build only, consistent with the public GitLab pipeline. Public image
+      # publishing requires the binary/source release checks in LICENSE_REVIEW.md.
+      - name: Build image
+        env:
+          IMAGE: ${{ matrix.image }}
+          DOCKERFILE: ${{ matrix.dockerfile }}
+          BUILD_CONTEXT: ${{ matrix.context }}
+        run: |
+          docker build \
+            --pull \
+            --provenance=false \
+            --file "$DOCKERFILE" \
+            --tag "containerproxy-ci/${IMAGE}:${GITHUB_SHA}" \
+            --label "org.opencontainers.image.source=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
+            --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+            "$BUILD_CONTEXT"
