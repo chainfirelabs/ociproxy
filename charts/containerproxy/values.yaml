@@ -1,0 +1,282 @@
+# One independent node per release: primary (default) OR one replica.
+# Each release has its own local accounts, UI, secret and private sources.
+# See ISOLATION.md and this chart's README before upgrading old volumes.
+
+image:
+  # The proxy image built from docker/Dockerfile (both roles use it).
+  repository: containerproxy
+  # Defaults to the chart's appVersion.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+# Cluster DNS domain, for the in-cluster URLs the chart builds.
+clusterDomain: cluster.local
+nameOverride: ""
+fullnameOverride: ""
+
+# Local node administration. These credentials never go to another node.
+auth:
+  # Name of an existing Secret with the keys below. When empty the chart
+  # creates one, generating any value left empty here (kept across upgrades).
+  #   secret         local administration/encryption secret (CONTAINERPROXY_SECRET)
+  #   push-password  bootstrap admin password
+  existingSecret: ""
+  # Unique local secret for this node and UI only.
+  secret: ""
+  # This node's bootstrap admin; use a separate password on every node.
+  pushUsername: ci
+  pushPassword: ""
+
+# Settings for this node only. Public sources are imported without replacing
+# this node's private sources or local account/visibility settings.
+config:
+  # "public" (anonymous pulls) or "private" (signed-in users only).
+  defaultVisibility: public
+  # Seconds a cached tag is served before it is revalidated upstream.
+  tagTTL: 300
+  # Expire mirrored images not pulled for N days (0 = keep forever).
+  gcManifestMaxIdleDays: 0
+  # Seconds between maintenance runs (GC + changelog compaction; 0 = off).
+  gcInterval: 3600
+  # text | json
+  logFormat: text
+  # Per-path visibility rules, first match wins ("*" also matches "/").
+  accessRules: []
+  # - path: internal/*
+  #   visibility: private
+
+  # Upstream registries, each served under /<prefix>/. Credentials live in
+  # this node's Secret, never a ConfigMap. Public sharing must be explicit;
+  # private sources and service credentials remain on this node.
+  upstreams:
+    - name: dockerhub
+      base_url: https://registry-1.docker.io
+      prefix: dockerhub
+      sharing: public
+      visibility: public
+      official_namespace: library
+    - name: ghcr
+      base_url: https://ghcr.io
+      prefix: ghcr
+      sharing: public
+      visibility: public
+    - name: quay
+      base_url: https://quay.io
+      prefix: quay
+      sharing: public
+      visibility: public
+  # Optional per-upstream keys: default (bool), visibility, username, password.
+
+  # Classic HTTP Helm repositories (index.yaml + .tgz), served at /helm/<name>/.
+  helmRepos: []
+  # - name: jetstack
+  #   base_url: https://charts.jetstack.io
+  #   # visibility, username, password are optional
+
+  # Let admins add more registries / Helm repos in the web UI. The entries
+  # above stay read-only there (shown greyed out) and win on name clashes.
+  # Managed entries live in this node's database. Defaults are private/local;
+  # only explicitly public entries join the shared catalog. Credentials use
+  # this node's auth.secret and are never shared.
+  managedSources: true
+
+  # Extra environment for every node (CONTAINERPROXY_* overrides).
+  extraEnv: []
+
+# Pod-level security, shared by every workload. The image runs as the
+# distroless nonroot user (65532).
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  fsGroupChangePolicy: OnRootMismatch
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: [ALL]
+
+primary:
+  enabled: true
+  # Proxy for upstream registry / Helm repo fetches only, e.g.
+  # http://proxy.corp:3128 (credentials in the URL are fine: it is stored in
+  # the Secret). Node-to-node traffic never uses it.
+  upstreamProxy: ""
+  # Or take it from an existing Secret key instead.
+  upstreamProxySecretRef: {}
+  #   name: squid-credentials
+  #   key: url
+  service:
+    type: ClusterIP
+    port: 5000
+    annotations: {}
+    # nodePort: 30500
+  persistence:
+    enabled: true
+    size: 50Gi
+    storageClass: ""
+    accessModes: [ReadWriteOnce]
+    # Use a pre-created claim instead of a volumeClaimTemplate.
+    existingClaim: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  podAnnotations: {}
+  podLabels: {}
+  extraEnv: []
+
+replica:
+  enabled: false
+  # Exactly one replica per release; install more releases for more nodes.
+  replicaCount: 1
+  # Primary URL. Empty = this release's primary Service.
+  primaryUrl: ""
+  # Address shown in public replication status; no incoming pushes are used.
+  advertisedUrl: ""
+  service:
+    type: ClusterIP
+    port: 5000
+    annotations: {}
+    # nodePort: 30501
+  persistence:
+    enabled: true
+    size: 50Gi
+    storageClass: ""
+    accessModes: [ReadWriteOnce]
+  podDisruptionBudget:
+    enabled: true
+    maxUnavailable: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
+  nodeSelector: {}
+  tolerations: []
+  # Default: spread replica pods across nodes when possible.
+  affinity: {}
+  podAnnotations: {}
+  podLabels: {}
+  extraEnv: []
+
+ui:
+  enabled: true
+  image:
+    # The UI image built from docker/Dockerfile.ui.
+    repository: containerproxy-ui
+    tag: ""
+    pullPolicy: IfNotPresent
+  # Proxy URL the UI manages. Empty = this release's primary Service.
+  primaryUrl: ""
+  # Optional local backend override for ALL UI operations. Defaults to this
+  # release's own node. Never point it at another node's account database.
+  nodeUrl: ""
+  # How browsers reach the UI (required for single sign-on).
+  publicUrl: ""
+  sessionHours: 12
+  oidc:
+    issuer: ""
+    clientId: ""
+    # Stored in the chart's Secret (or set existingSecret below).
+    clientSecret: ""
+    # Existing Secret holding the client secret under key "oidc-client-secret".
+    existingSecret: ""
+    providerName: ""
+    adminGroup: ""
+    pusherGroup: ""
+    readerGroup: ""
+  service:
+    type: ClusterIP
+    port: 8080
+    annotations: {}
+  resources:
+    requests:
+      cpu: 50m
+      memory: 96Mi
+    limits:
+      memory: 256Mi
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  podAnnotations: {}
+  extraEnv: []
+
+# Ingress per component. A registry needs large request bodies and long
+# timeouts; for ingress-nginx add e.g.
+#   nginx.ingress.kubernetes.io/proxy-body-size: "0"
+#   nginx.ingress.kubernetes.io/proxy-read-timeout: "900"
+#   nginx.ingress.kubernetes.io/proxy-request-buffering: "off"
+ingress:
+  primary:
+    enabled: false
+    className: ""
+    annotations: {}
+    host: ""
+    tls: []
+  replica:
+    enabled: false
+    className: ""
+    annotations: {}
+    host: ""
+    tls: []
+  ui:
+    enabled: false
+    className: ""
+    annotations: {}
+    host: ""
+    tls: []
+
+# Optional NetworkPolicies. Both roles need upstream egress for local private
+# sources. Egress stays unrestricted unless explicit rules below are supplied.
+networkPolicy:
+  enabled: false
+  # Namespace/pod selector for the cluster DNS the pods may query.
+  dns:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: kube-system
+    podSelector:
+      matchLabels:
+        k8s-app: kube-dns
+  # Extra egress rules for replicas. Needed when the primary is outside this
+  # release (primary.enabled=false), e.g.
+  # - to: [{ipBlock: {cidr: 10.20.0.0/16}}]
+  #   ports: [{port: 443, protocol: TCP}]
+  replicaExtraEgress: []
+  # Egress for the primary. Empty = unrestricted. To allow only the proxy:
+  # - to: [{ipBlock: {cidr: 10.0.0.1/32}}]
+  #   ports: [{port: 3128, protocol: TCP}]
+  primaryEgress: []
+  # Who may reach the registry ports. Empty = anyone.
+  ingressFrom: []
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+  automount: false
+
+# Prometheus Operator ServiceMonitor (scrapes /metrics with the node secret).
+serviceMonitor:
+  enabled: false
+  interval: 30s
+  labels: {}
+
+# Deploy one independent node per Helm release. Never share auth.existingSecret
+# between releases. Register only the replica token with the primary.
+replication:
+  id: "" # defaults to this replica's Helm release name
+  token: "" # replica-only outbound token; generated in its local Secret if empty
+  peers: {} # primary-only mapping: site-a: {token: "...", publish: false}

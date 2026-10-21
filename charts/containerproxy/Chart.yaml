@@ -1,0 +1,7 @@
+apiVersion: v2
+name: containerproxy
+description: Primary/replica pull-through container registry and Helm chart mirror
+type: application
+version: 0.3.0
+appVersion: "0.1.0"
+keywords: [registry, oci, docker, helm, mirror, proxy]

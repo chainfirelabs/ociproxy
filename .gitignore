@@ -1,0 +1,20 @@
+.env
+containerproxy.toml
+__pycache__/
+**/__pycache__/
+*.pyc
+.pytest_cache/
+var/
+var-*/
+*.egg-info/
+build/
+dist/
+
+# Local environments and credentials
+.venv/
+.env.*
+!.env.example
+*.pem
+*.key
+
+containerproxy-replica*.toml

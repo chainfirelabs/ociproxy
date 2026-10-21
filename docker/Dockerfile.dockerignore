@@ -1,0 +1,20 @@
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+var/
+var-*/
+__pycache__/
+**/__pycache__/
+*.pyc
+.pytest_cache/
+tests/
+docker-compose.yml
+containerproxy.toml.example
+
+# Keep local configuration and environments out of the build context.
+.venv/
+containerproxy*.toml
+*.pem
+*.key

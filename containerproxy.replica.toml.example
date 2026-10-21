@@ -1,0 +1,4 @@
+# Each replica keeps its own private sources and accounts.
+# Add sources in this node's UI, or add [[upstream]] / [[helm]] entries here.
+# Defaults are sharing="local" and visibility="private".
+# Public sources are imported from the primary automatically.

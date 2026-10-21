@@ -1,0 +1,26 @@
+[
+  {
+    "name": "libffi",
+    "version": null,
+    "license_url": "https://raw.githubusercontent.com/libffi/libffi/master/LICENSE",
+    "license_file": "third_party/licenses/native/libffi/LICENSE",
+    "license_sha256": "17b64dc60f3b6897a60f971e288b973f655c2edcdf08b25f3c3dd5549857881c",
+    "note": "Supplemental upstream notice; bundled version not established"
+  },
+  {
+    "name": "libyaml",
+    "version": "0.2.5",
+    "license_url": "https://raw.githubusercontent.com/yaml/libyaml/0.2.5/License",
+    "license_file": "third_party/licenses/native/libyaml/LICENSE",
+    "license_sha256": "c40112449f254b9753045925248313e9270efa36d226b22d82d4cc6c43c57f29",
+    "note": "Version reported by reviewed wheel"
+  },
+  {
+    "name": "openssl",
+    "version": "4.0.3",
+    "license_url": "https://raw.githubusercontent.com/openssl/openssl/openssl-4.0.3/LICENSE.txt",
+    "license_file": "third_party/licenses/native/openssl/LICENSE",
+    "license_sha256": "7d5450cb2d142651b8afa315b5f238efc805dad827d91ba367d8516bc9d49e7a",
+    "note": "Version reported by reviewed wheel"
+  }
+]

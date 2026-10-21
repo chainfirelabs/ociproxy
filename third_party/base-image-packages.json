@@ -1,0 +1,234 @@
+{
+  "image": "gcr.io/distroless/python3-debian13@sha256:8ee214843129f43e2ebf5e0ca9f2e4e6d8292143d1b8a6787f169b5898578884",
+  "reviewed_platform": "linux/amd64",
+  "packages": [
+    {
+      "package": "base-files",
+      "version": "13.8+deb13u7",
+      "source_package": "base-files",
+      "source_version": "13.8+deb13u7"
+    },
+    {
+      "package": "ca-certificates",
+      "version": "20250419",
+      "source_package": "ca-certificates",
+      "source_version": "20250419"
+    },
+    {
+      "package": "gcc-14-base",
+      "version": "14.2.0-19",
+      "source_package": "gcc-14",
+      "source_version": "14.2.0-19"
+    },
+    {
+      "package": "libbz2-1.0",
+      "version": "1.0.8-6",
+      "source_package": "bzip2",
+      "source_version": "1.0.8-6"
+    },
+    {
+      "package": "libc-bin",
+      "version": "2.41-12+deb13u4",
+      "source_package": "glibc",
+      "source_version": "2.41-12+deb13u4"
+    },
+    {
+      "package": "libc6",
+      "version": "2.41-12+deb13u4",
+      "source_package": "glibc",
+      "source_version": "2.41-12+deb13u4"
+    },
+    {
+      "package": "libcom-err2",
+      "version": "1.47.2-3+b12",
+      "source_package": "e2fsprogs",
+      "source_version": "1.47.2-3"
+    },
+    {
+      "package": "libcrypt1",
+      "version": "1:4.4.38-1",
+      "source_package": "libxcrypt",
+      "source_version": "1:4.4.38-1"
+    },
+    {
+      "package": "libdb5.3t64",
+      "version": "5.3.28+dfsg2-9",
+      "source_package": "db5.3",
+      "source_version": "5.3.28+dfsg2-9"
+    },
+    {
+      "package": "libexpat1",
+      "version": "2.8.3-1~deb13u1",
+      "source_package": "expat",
+      "source_version": "2.8.3-1~deb13u1"
+    },
+    {
+      "package": "libffi8",
+      "version": "3.4.8-2",
+      "source_package": "libffi",
+      "source_version": "3.4.8-2"
+    },
+    {
+      "package": "libgcc-s1",
+      "version": "14.2.0-19",
+      "source_package": "gcc-14",
+      "source_version": "14.2.0-19"
+    },
+    {
+      "package": "libgomp1",
+      "version": "14.2.0-19",
+      "source_package": "gcc-14",
+      "source_version": "14.2.0-19"
+    },
+    {
+      "package": "libgssapi-krb5-2",
+      "version": "1.21.3-5+deb13u1",
+      "source_package": "krb5",
+      "source_version": "1.21.3-5+deb13u1"
+    },
+    {
+      "package": "libk5crypto3",
+      "version": "1.21.3-5+deb13u1",
+      "source_package": "krb5",
+      "source_version": "1.21.3-5+deb13u1"
+    },
+    {
+      "package": "libkeyutils1",
+      "version": "1.6.3-6",
+      "source_package": "keyutils",
+      "source_version": "1.6.3-6"
+    },
+    {
+      "package": "libkrb5-3",
+      "version": "1.21.3-5+deb13u1",
+      "source_package": "krb5",
+      "source_version": "1.21.3-5+deb13u1"
+    },
+    {
+      "package": "libkrb5support0",
+      "version": "1.21.3-5+deb13u1",
+      "source_package": "krb5",
+      "source_version": "1.21.3-5+deb13u1"
+    },
+    {
+      "package": "liblzma5",
+      "version": "5.8.1-1+deb13u1",
+      "source_package": "xz-utils",
+      "source_version": "5.8.1-1+deb13u1"
+    },
+    {
+      "package": "libncursesw6",
+      "version": "6.5+20250216-2",
+      "source_package": "ncurses",
+      "source_version": "6.5+20250216-2"
+    },
+    {
+      "package": "libnsl2",
+      "version": "1.3.0-3+b3",
+      "source_package": "libnsl",
+      "source_version": "1.3.0-3"
+    },
+    {
+      "package": "libpython3.13-minimal",
+      "version": "3.13.5-2+deb13u5",
+      "source_package": "python3.13",
+      "source_version": "3.13.5-2+deb13u5"
+    },
+    {
+      "package": "libpython3.13-stdlib",
+      "version": "3.13.5-2+deb13u5",
+      "source_package": "python3.13",
+      "source_version": "3.13.5-2+deb13u5"
+    },
+    {
+      "package": "libreadline8t64",
+      "version": "8.2-6",
+      "source_package": "readline",
+      "source_version": "8.2-6"
+    },
+    {
+      "package": "libsqlite3-0",
+      "version": "3.46.1-7+deb13u2",
+      "source_package": "sqlite3",
+      "source_version": "3.46.1-7+deb13u2"
+    },
+    {
+      "package": "libssl3t64",
+      "version": "3.5.7-1~deb13u2",
+      "source_package": "openssl",
+      "source_version": "3.5.7-1~deb13u2"
+    },
+    {
+      "package": "libstdc++6",
+      "version": "14.2.0-19",
+      "source_package": "gcc-14",
+      "source_version": "14.2.0-19"
+    },
+    {
+      "package": "libtinfo6",
+      "version": "6.5+20250216-2",
+      "source_package": "ncurses",
+      "source_version": "6.5+20250216-2"
+    },
+    {
+      "package": "libtirpc3t64",
+      "version": "1.3.6+ds-1",
+      "source_package": "libtirpc",
+      "source_version": "1.3.6+ds-1"
+    },
+    {
+      "package": "libuuid1",
+      "version": "2.41.5-0+deb13u1",
+      "source_package": "util-linux",
+      "source_version": "2.41.5-0+deb13u1"
+    },
+    {
+      "package": "libzstd1",
+      "version": "1.5.7+dfsg-1",
+      "source_package": "libzstd",
+      "source_version": "1.5.7+dfsg-1"
+    },
+    {
+      "package": "media-types",
+      "version": "13.0.0",
+      "source_package": "media-types",
+      "source_version": "13.0.0"
+    },
+    {
+      "package": "netbase",
+      "version": "6.5",
+      "source_package": "netbase",
+      "source_version": "6.5"
+    },
+    {
+      "package": "python3.13-minimal",
+      "version": "3.13.5-2+deb13u5",
+      "source_package": "python3.13",
+      "source_version": "3.13.5-2+deb13u5"
+    },
+    {
+      "package": "python3.13-venv",
+      "version": "3.13.5-2+deb13u5",
+      "source_package": "python3.13",
+      "source_version": "3.13.5-2+deb13u5"
+    },
+    {
+      "package": "tzdata",
+      "version": "2026c-0+deb13u1",
+      "source_package": "tzdata",
+      "source_version": "2026c-0+deb13u1"
+    },
+    {
+      "package": "tzdata-legacy",
+      "version": "2026c-0+deb13u1",
+      "source_package": "tzdata",
+      "source_version": "2026c-0+deb13u1"
+    },
+    {
+      "package": "zlib1g",
+      "version": "1:1.3.dfsg+really1.3.1-1+b1",
+      "source_package": "zlib",
+      "source_version": "1:1.3.dfsg+really1.3.1-1"
+    }
+  ]
+}

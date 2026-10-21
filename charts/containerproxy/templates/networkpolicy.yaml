@@ -1,0 +1,82 @@
+{{- /*
+The compose file's network isolation, as NetworkPolicies:
+  replicas: optional egress rules for public coordinator and private upstreams
+  primary:  egress unrestricted unless networkPolicy.primaryEgress is set
+  ui:       talks to its own node (and its own OIDC issuer)
+*/ -}}
+{{- if .Values.networkPolicy.enabled }}
+{{- $np := .Values.networkPolicy }}
+{{- $dns := dict "to" (list (dict "namespaceSelector" $np.dns.namespaceSelector "podSelector" $np.dns.podSelector)) "ports" (list (dict "port" 53 "protocol" "UDP") (dict "port" 53 "protocol" "TCP")) }}
+{{- if .Values.replica.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "containerproxy.fullname" . }}-replica
+  labels:
+    {{- include "containerproxy.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "containerproxy.componentSelector" (dict "root" . "component" "replica") | nindent 6 }}
+  policyTypes: [Ingress{{ if $np.replicaExtraEgress }}, Egress{{ end }}]
+  ingress:
+    - ports:
+        - port: http
+          protocol: TCP
+      {{- with $np.ingressFrom }}
+      from:
+        {{- toYaml . | nindent 8 }}
+        # This node's local UI.
+        - podSelector:
+            matchLabels:
+              {{- include "containerproxy.componentSelector" (dict "root" $ "component" "ui") | nindent 14 }}
+      {{- end }}
+  {{- if $np.replicaExtraEgress }}
+  egress:
+    - {{- toYaml $dns | nindent 6 }}
+    {{- if .Values.primary.enabled }}
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "containerproxy.componentSelector" (dict "root" . "component" "primary") | nindent 14 }}
+      ports:
+        - port: 5000
+          protocol: TCP
+    {{- end }}
+    {{- with $np.replicaExtraEgress }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+{{- if .Values.primary.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "containerproxy.fullname" . }}-primary
+  labels:
+    {{- include "containerproxy.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "containerproxy.componentSelector" (dict "root" . "component" "primary") | nindent 6 }}
+  policyTypes: [Ingress{{ if $np.primaryEgress }}, Egress{{ end }}]
+  ingress:
+    - ports:
+        - port: http
+          protocol: TCP
+      {{- with $np.ingressFrom }}
+      from:
+        {{- toYaml . | nindent 8 }}
+        # Replicas and the UI of this release.
+        - podSelector:
+            matchLabels:
+              {{- include "containerproxy.selectorLabels" $ | nindent 14 }}
+      {{- end }}
+  {{- if $np.primaryEgress }}
+  egress:
+    - {{- toYaml $dns | nindent 6 }}
+    {{- toYaml $np.primaryEgress | nindent 4 }}
+  {{- end }}
+{{- end }}
+{{- end }}

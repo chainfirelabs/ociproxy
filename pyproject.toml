@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "containerproxy"
+version = "0.1.0"
+description = "ContainerProxy — primary/replica pull-through container registry (devpi-style)"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+dependencies = [
+    # Security baseline matches the audited Starlette lock; includes Range
+    # handling and request-URL validation fixes. h11 excludes request smuggling.
+    "starlette>=1.7.0",
+    # Excludes CA bundles affected by GHSA-6q48-6c7w-9gw2 (via httpx).
+    "certifi>=2026.10.19",
+    "uvicorn>=0.35",
+    "h11>=0.16",
+    "httpx>=0.28",
+    # Helm index rewriting (node-level compose/serialize; wheels bundle libyaml).
+    "pyyaml>=6.0.2",
+    # AES-GCM for upstream credentials added in the web UI (stored encrypted).
+    "cryptography>=44",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8", "pytest-asyncio>=0.23"]
+
+[project.scripts]
+containerproxy = "containerproxy.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

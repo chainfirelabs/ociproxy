@@ -1,0 +1,39 @@
+# syntax=docker/dockerfile:1
+
+# Base images are pinned by multi-arch index digest for reproducible builds.
+# To update: skopeo inspect --raw docker://<image:tag> | sha256sum
+# Keep the builder's Python minor version equal to the runtime's (3.13).
+
+# Build stage: install containerproxy-ui + deps into an isolated directory.
+# All runtime deps (starlette, uvicorn, httpx) are pure Python, so the
+# tree is portable into the distroless python3 image.
+FROM python:3.13-slim-trixie@sha256:8d9d0b8bcf6506481eae4907c18f5e3e7902e629f5f6d684f9e7c32e85e3ddf0 AS builder
+WORKDIR /build
+# Locked, hash-verified dependencies (regenerate with:
+#   uv pip compile pyproject.toml --generate-hashes --python-version 3.13 --universal -o requirements.lock)
+COPY requirements.lock ./
+RUN pip install --no-cache-dir --require-hashes --target /staged -r requirements.lock
+COPY pyproject.toml LICENSE THIRD_PARTY_NOTICES.md ./
+COPY third_party/ ./third_party/
+COPY src ./src
+RUN pip install --no-cache-dir --no-deps --target /staged .
+
+# Runtime: Google distroless python3 (Debian 13, Python 3.13), nonroot user (uid 65532).
+# Stateless: all state lives in the proxy; nothing to mount here.
+FROM gcr.io/distroless/python3-debian13:nonroot@sha256:8ee214843129f43e2ebf5e0ca9f2e4e6d8292143d1b8a6787f169b5898578884
+
+ENV PYTHONPATH=/app/site-packages \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    UI_LISTEN=0.0.0.0 \
+    UI_PORT=8080 \
+    CONTAINERPROXY_URL=http://primary:5000
+
+COPY --from=builder /staged /app/site-packages
+# Preserve project, dependency and supplemental third-party license notices.
+COPY --from=builder /build/LICENSE /build/THIRD_PARTY_NOTICES.md /usr/share/licenses/containerproxy/
+COPY --from=builder /build/third_party/ /usr/share/licenses/containerproxy/third_party/
+
+EXPOSE 8080
+
+ENTRYPOINT ["/usr/bin/python3", "-m", "containerproxy_ui"]

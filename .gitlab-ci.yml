@@ -1,0 +1,107 @@
+# Builds both images. Set PUBLISH_IMAGES=true to enable registry publishing
+# after completing the binary/source release requirements in LICENSE_REVIEW.md.
+# Image destinations:
+#
+#   $CI_REGISTRY_IMAGE      containerproxy (proxy node, docker/Dockerfile)
+#   $CI_REGISTRY_IMAGE/ui   containerproxy-ui (web admin, docker/Dockerfile.ui)
+#
+# Tags pushed:
+#   default branch  -> :<short sha>, :latest
+#   git tag vX.Y.Z  -> :<short sha>, :vX.Y.Z
+# Merge requests and other branches build only (nothing is pushed), so a
+# broken Dockerfile fails the MR instead of the registry.
+#
+# Uses Docker-in-Docker: the runner must allow privileged containers
+# (gitlab.com shared runners do).
+
+workflow:
+  rules:
+    # One pipeline per change: MR pipelines for MRs, branch pipelines otherwise.
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
+      when: never
+    - if: $CI_COMMIT_BRANCH
+    - if: $CI_COMMIT_TAG
+
+stages:
+  - test
+  - build
+
+.image-build:
+  stage: build
+  image: docker:cli
+  services:
+    - docker:dind
+  variables:
+    DOCKER_TLS_CERTDIR: "/certs"
+  rules:
+    - if: '$PUBLISH_IMAGES == "true" && $CI_COMMIT_TAG'
+      variables:
+        PUSH: "true"
+    - if: '$PUBLISH_IMAGES == "true" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      variables:
+        PUSH: "true"
+    - when: on_success
+      variables:
+        PUSH: "false"
+  before_script:
+    - |
+      if [ "$PUSH" = "true" ]; then
+        echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+      fi
+  script:
+    - |
+      set -eu
+      TAGS="$CI_COMMIT_SHORT_SHA"
+      if [ -n "${CI_COMMIT_TAG:-}" ]; then TAGS="$TAGS $CI_COMMIT_TAG"; fi
+      if [ "${CI_COMMIT_BRANCH:-}" = "$CI_DEFAULT_BRANCH" ]; then TAGS="$TAGS latest"; fi
+      TAG_ARGS=""
+      for t in $TAGS; do TAG_ARGS="$TAG_ARGS --tag $IMAGE:$t"; done
+
+      # Reuse layers from the last published build (a missing image is fine).
+      # Base images are digest-pinned in the Dockerfiles, so builds stay reproducible.
+      docker build \
+        --pull \
+        --cache-from "$IMAGE:latest" \
+        --build-arg BUILDKIT_INLINE_CACHE=1 \
+        --label "org.opencontainers.image.source=$CI_PROJECT_URL" \
+        --label "org.opencontainers.image.revision=$CI_COMMIT_SHA" \
+        --file "$DOCKERFILE" \
+        $TAG_ARGS \
+        "$CONTEXT"
+
+      if [ "$PUSH" = "true" ]; then
+        for t in $TAGS; do docker push "$IMAGE:$t"; done
+      else
+        echo "Built $IMAGE ($TAGS). Publishing requires PUBLISH_IMAGES=true on the default branch or a tag."
+      fi
+
+build:proxy:
+  extends: .image-build
+  variables:
+    IMAGE: $CI_REGISTRY_IMAGE
+    DOCKERFILE: docker/Dockerfile
+    CONTEXT: .
+
+build:ui:
+  extends: .image-build
+  variables:
+    IMAGE: $CI_REGISTRY_IMAGE/ui
+    DOCKERFILE: docker/Dockerfile.ui
+    CONTEXT: webapp
+
+lint:chart:
+  stage: test
+  image: alpine/helm:3.16.4
+  script:
+    - helm lint charts/containerproxy
+    - helm template ci charts/containerproxy > /dev/null
+    # Replicas-only install against a remote primary.
+    - helm template ci charts/containerproxy --set primary.enabled=false --set replica.enabled=true --set ui.enabled=false
+        --set replica.primaryUrl=https://primary.example.com > /dev/null
+
+check:licenses:
+  stage: test
+  image: python:3.13-slim
+  script:
+    - python tools/check_licenses.py

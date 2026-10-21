@@ -1,0 +1,25 @@
+[project]
+name = "containerproxy-ui"
+version = "0.1.0"
+description = "Web admin UI for containerproxy: configure proxied registries, inspect stored images"
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+dependencies = [
+    # Same CVE floors as the proxy (see ../pyproject.toml).
+    "starlette>=1.7.0",
+    "certifi>=2026.10.19",
+    "uvicorn>=0.35",
+    "h11>=0.16",
+    "httpx>=0.28",
+]
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+containerproxy_ui = ["logo.png"]

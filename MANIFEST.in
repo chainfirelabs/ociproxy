@@ -1,0 +1,2 @@
+include LICENSE THIRD_PARTY_NOTICES.md LICENSE_REVIEW.md
+recursive-include third_party *
