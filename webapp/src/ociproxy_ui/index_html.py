@@ -20,10 +20,12 @@ INDEX_HTML = """<!DOCTYPE html>
   code, .mono { font-family: "JetBrains Mono", "Fira Code", ui-monospace, monospace; }
   header {
     max-width: 1180px; margin: 0 auto;  /* same column as main */
-    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    display: flex; align-items: flex-start; gap: 10px;
     padding: 14px 22px; border-bottom: 1px solid var(--line);
     position: sticky; top: 0; background: var(--bg); z-index: 5;
   }
+  .header-main { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; flex: 1; min-width: 0; }
+  #logout { flex-shrink: 0; margin-top: 3px; }
   header h1 { font-size: 17px; margin: 0; letter-spacing: .3px; }
   .logo { height: 34px; width: 34px; border-radius: 7px; display: block; }
   .badge {
@@ -94,7 +96,7 @@ INDEX_HTML = """<!DOCTYPE html>
   .pager { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-top: 1px solid var(--line); }
   .pager .info { color: var(--dim); font-size: 13px; }
   .empty { padding: 18px 16px; color: var(--dim); }
-  nav { display: flex; gap: 4px; }
+  nav { display: flex; gap: 4px; flex-wrap: wrap; }
   nav button { background: transparent; border-color: transparent; color: var(--dim); }
   nav button.active { color: var(--text); border-color: var(--line); background: var(--card2); }
   .who { color: var(--dim); font-size: 13px; max-width: 200px; overflow: hidden;
@@ -166,14 +168,14 @@ INDEX_HTML = """<!DOCTYPE html>
 
 <div id="app" class="view">
 <header>
+  <div class="header-main">
   <img src="/logo.png" class="logo" alt="OCIProxy logo">
   <h1>OCIProxy</h1>
   <span id="role" class="badge">…</span>
   <nav id="nav">
     <button data-view="dash" class="active">Dashboard</button>
-    <button data-view="tokens">My tokens</button>
-    <button data-view="users" id="nav-users" style="display:none">Users</button>
     <button data-view="cleanup" id="nav-cleanup" style="display:none">Cleanup</button>
+    <button data-view="users" id="nav-users" style="display:none">Users</button>
     <button data-view="account">Account</button>
   </nav>
   <span class="spacer"></span>
@@ -182,6 +184,7 @@ INDEX_HTML = """<!DOCTYPE html>
   <button id="sync-now" style="display:none" title="Sync the shared public catalog and content">Sync now</button>
   <span id="updated"></span>
   <span class="who" id="who"></span>
+  </div>
   <button id="logout">Sign out</button>
 </header>
 <div id="sync-toast" hidden>
@@ -270,19 +273,6 @@ INDEX_HTML = """<!DOCTYPE html>
     <section><h2>Cleanup requests</h2><div id="cleanup-jobs" style="padding:12px 16px"></div></section>
   </div>
 
-  <div class="view" id="view-tokens">
-    <section>
-      <h2>Personal access tokens <span class="hint">use as the password for docker login / helm registry login</span></h2>
-      <div id="token-once"></div>
-      <div id="tokens"></div>
-      <form class="inline" id="token-form">
-        <input id="token-name" placeholder="Token name, e.g. laptop or ci-runner" maxlength="64" required style="min-width:260px">
-        <input id="token-days" type="number" min="1" max="3650" placeholder="Expires in days (blank = never)" style="width:230px">
-        <button type="submit">Create token</button>
-      </form>
-    </section>
-  </div>
-
   <div class="view" id="view-users">
     <section>
       <h2>Users <span class="hint">OIDC users are created on first sign-in; their role follows provider groups</span></h2>
@@ -308,6 +298,16 @@ INDEX_HTML = """<!DOCTYPE html>
         <input id="pw-current" type="password" placeholder="Current password" autocomplete="current-password" required>
         <input id="pw-new" type="password" placeholder="New password (min 10 chars)" autocomplete="new-password" required>
         <button type="submit">Change password</button>
+      </form>
+    </section>
+    <section>
+      <h2>Personal access tokens <span class="hint">use as the password for docker login / helm registry login</span></h2>
+      <div id="token-once"></div>
+      <div id="tokens"></div>
+      <form class="inline" id="token-form">
+        <input id="token-name" placeholder="Token name, e.g. laptop or ci-runner" maxlength="64" required style="min-width:260px">
+        <input id="token-days" type="number" min="1" max="3650" placeholder="Expires in days (blank = never)" style="width:230px">
+        <button type="submit">Create token</button>
       </form>
     </section>
   </div>
@@ -642,9 +642,8 @@ async function refreshAll() {
     const view = currentView();
     if (view === 'dash') await Promise.all([loadOverview(), loadUpstreams(), loadImages()]);
     else if (view === 'cleanup') await loadCleanup();
-    else if (view === 'tokens') await loadTokens();
     else if (view === 'users') await loadUsers();
-    else if (view === 'account') await loadAccount();
+    else if (view === 'account') { await loadAccount(); await loadTokens(); }
     clearErr();
     document.getElementById('updated').textContent = 'updated ' + fmtTime(Date.now() / 1000).slice(11);
   } catch (e) {
