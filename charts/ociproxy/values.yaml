@@ -35,10 +35,18 @@ config:
   defaultVisibility: public
   # Seconds a cached tag is served before it is revalidated upstream.
   tagTTL: 300
+  # UI-saved cleanup policies override the defaults below.
   # Expire mirrored images not pulled for N days (0 = keep forever).
   gcManifestMaxIdleDays: 0
   # Seconds between maintenance runs (GC + changelog compaction; 0 = off).
   gcInterval: 3600
+  # Orphan blobs younger than this are retained for in-flight pulls/pushes.
+  gcBlobGrace: 86400
+  # Local filesystem pressure: 0 high disables; reclaim toward low watermark.
+  gcDiskHighPercent: 0
+  gcDiskLowPercent: 75
+  # Local cached blob byte limit; 0 disables. Pins/pushes remain protected.
+  gcMaxCacheBytes: 0
   # text | json
   logFormat: text
   # Per-path visibility rules, first match wins ("*" also matches "/").

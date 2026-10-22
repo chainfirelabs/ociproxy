@@ -41,6 +41,9 @@ tag_ttl = 300
 interval = 3600
 manifest_max_idle_days = 0
 blob_grace = 86400
+disk_high_percent = 0
+disk_low_percent = 75
+max_cache_bytes = 0
 
 [uploads]
 idle_timeout = 900

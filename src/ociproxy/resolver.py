@@ -316,7 +316,8 @@ class Resolver:
         return its path. Used by HEAD requests and the replica tail; GET
         requests should use open_blob_stream() to stream while fetching.
         """
-        if self.store.has_blob(digest) and self.cached_blob_allowed(upstream, repo, digest):
+        if (self.store.has_blob(digest) and self.cached_blob_allowed(upstream, repo, digest)
+                and self.store.touch_blob(digest)):
             return self.store.blob_path(digest)
         return await self._blob_fetch(upstream, repo, digest).wait_done()
 

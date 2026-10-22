@@ -21,7 +21,7 @@ authenticate. This is a naming upgrade, not an automatic migration of live stora
    project name with `docker compose -p NAME` to reuse its node-specific volumes;
    changing the project name otherwise creates a separate empty deployment.
    Update your private `.env` and mounted config filenames before starting.
-5. For Helm, use `charts/ociproxy` (chart 0.4). Chart names and labels change
+5. For Helm, use `charts/ociproxy` (chart 0.4 and later). Chart names and labels change
    resource names and immutable StatefulSet selectors. Do not assume a normal
    in-place upgrade will preserve or reattach old claims. Plan a stopped-node
    restore into the new release's storage, retain the old claims until verified,

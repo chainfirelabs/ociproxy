@@ -1,6 +1,6 @@
 [project]
 name = "ociproxy-ui"
-version = "0.1.0"
+version = "0.2.0"
 description = "Web admin UI for ociproxy: configure proxied registries, inspect stored images"
 requires-python = ">=3.11"
 license = "MIT"

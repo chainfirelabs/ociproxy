@@ -121,6 +121,14 @@ what an earlier install stored (so upgrades keep it), else random.
   value: {{ .Values.config.gcInterval | quote }}
 - name: OCIPROXY_GC_MANIFEST_MAX_IDLE_DAYS
   value: {{ .Values.config.gcManifestMaxIdleDays | quote }}
+- name: OCIPROXY_GC_BLOB_GRACE
+  value: {{ .Values.config.gcBlobGrace | quote }}
+- name: OCIPROXY_GC_DISK_HIGH_PERCENT
+  value: {{ .Values.config.gcDiskHighPercent | quote }}
+- name: OCIPROXY_GC_DISK_LOW_PERCENT
+  value: {{ .Values.config.gcDiskLowPercent | quote }}
+- name: OCIPROXY_GC_MAX_CACHE_BYTES
+  value: {{ .Values.config.gcMaxCacheBytes | quote }}
 - name: OCIPROXY_LOG_FORMAT
   value: {{ .Values.config.logFormat | quote }}
 - name: OCIPROXY_CONFIG

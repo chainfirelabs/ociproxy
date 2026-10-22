@@ -17,7 +17,7 @@ import threading
 import time
 import uuid
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 log = logging.getLogger("ociproxy.store")
@@ -135,6 +135,21 @@ CREATE TABLE IF NOT EXISTS meta (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS cleanup_pins (
+    upstream TEXT NOT NULL, repo TEXT NOT NULL, reference TEXT NOT NULL,
+    PRIMARY KEY(upstream, repo, reference)
+);
+CREATE TABLE IF NOT EXISTS cleanup_previews (
+    id TEXT PRIMARY KEY, created_at REAL NOT NULL, payload TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS cleanup_jobs (
+    id TEXT PRIMARY KEY, created_at REAL NOT NULL, scope TEXT NOT NULL,
+    payload TEXT NOT NULL, result TEXT NOT NULL, peers TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS cleanup_acks (
+    job_id TEXT NOT NULL, peer_id TEXT NOT NULL, result TEXT NOT NULL,
+    PRIMARY KEY(job_id, peer_id)
+);
 """
 
 # Columns added after the initial schema: (table, column, definition).
@@ -251,7 +266,7 @@ class Store:
         self.blobs_dir.mkdir(parents=True, exist_ok=True)
         self.tmp_dir.mkdir(parents=True, exist_ok=True)
         self._sweep_tmp()
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self.shareable_repo = lambda upstream, repo: True
         self.replication_enabled = True
         self._listeners: list[Callable[[], None]] = []
@@ -354,8 +369,9 @@ class Store:
         algo, hexpart = parse_digest(digest)
         final = self.blobs_dir / algo / hexpart
         final.parent.mkdir(parents=True, exist_ok=True)
-        os.replace(tmp_path, final)
         with self._lock:
+            # Serialize replacement with GC unlinking the same digest.
+            os.replace(tmp_path, final)
             cur = self.db.execute(
                 "INSERT OR IGNORE INTO blobs (digest, size, stored_at) VALUES (?, ?, ?)",
                 (digest, size, time.time()),
@@ -377,17 +393,18 @@ class Store:
             self._notify()
         return new
 
-    def touch_blob(self, digest: str) -> None:
+    def touch_blob(self, digest: str) -> bool:
         """Mark an existing blob as in use (restarts its GC grace period).
 
         Called when a pusher finds the blob already present and skips the
         upload, so it cannot be collected before the manifest arrives.
         """
         with self._lock:
-            self.db.execute(
+            updated = self.db.execute(
                 "UPDATE blobs SET stored_at = ? WHERE digest = ?", (time.time(), digest)
-            )
+            ).rowcount
             self.db.commit()
+            return bool(updated and self.blob_path(digest).exists())
 
     # -- manifests -----------------------------------------------------------
 
@@ -444,9 +461,36 @@ class Store:
         """Scan a bounded batch and advance past excluded events too."""
         events = self.changelog_since(since, limit=limit)
         scanned = events[-1].serial if events else self.current_serial()
-        return [event for event in events if self.event_is_public(event)], scanned
+        public = []
+        for event in events:
+            if event.kind == "cleanup":
+                from .cleanup import validate_targets
+                try:
+                    payload = json.loads(event.bytes)
+                    targets = validate_targets(payload["targets"])
+                    # A source may be removed/restricted while a peer is offline.
+                    # Keep the request acknowledgeable without exporting its
+                    # newly private names or instructing deletion of that data.
+                    body = json.dumps({"job_id": payload["job_id"], "targets": [list(t) for t in targets
+                                       if t[0] != LOCAL and self.shareable_repo(t[0], t[1])]}).encode()
+                    event = replace(event, bytes=body, digest='sha256:' + hashlib.sha256(body).hexdigest())
+                except (ValueError, TypeError, KeyError):
+                    continue
+            if self.event_is_public(event):
+                public.append(event)
+        return public, scanned
 
     def event_is_public(self, event) -> bool:
+        if event.kind == "cleanup":
+            from .cleanup import validate_targets
+            try:
+                payload = json.loads(event.bytes)
+                targets = validate_targets(payload["targets"])
+                job = payload["job_id"]
+                return (isinstance(job, str) and len(job) == 32 and all(c in '0123456789abcdef' for c in job)
+                        and all(t[0] != LOCAL and self.shareable_repo(t[0], t[1]) for t in targets))
+            except (ValueError, TypeError, KeyError):
+                return False
         if event.kind == "manifest":
             return self.shareable_repo(event.upstream, event.repo)
         if event.kind == "blob":
@@ -896,7 +940,7 @@ class Store:
 
     # -- garbage collection ----------------------------------------------------
 
-    def gc(self, manifest_max_idle: float, blob_grace: float) -> GCResult:
+    def gc(self, manifest_max_idle: float, blob_grace: float, *, allowed_digests: set[str] | None = None) -> GCResult:
         """Expire idle mirrored manifests, then delete unreferenced blobs.
 
         - Manifests from upstream mirrors not stored, revalidated or pulled
@@ -918,6 +962,9 @@ class Store:
                     "AND MAX(stored_at, checked_at, pulled_at) < ?",
                     (LOCAL, cutoff),
                 ).fetchall()
+                from .cleanup import protected_keys_locked
+                protected = protected_keys_locked(self, set(keys))
+                keys = [key for key in keys if key not in protected]
                 for key in keys:
                     self.db.execute(
                         "DELETE FROM manifests WHERE upstream=? AND repo=? AND reference=? "
@@ -933,6 +980,8 @@ class Store:
             candidates = [r[0] for r in self.db.execute(
                 "SELECT digest FROM blobs WHERE stored_at < ?", (blob_cutoff,)
             ).fetchall()]
+        if allowed_digests is not None:
+            candidates = [digest for digest in candidates if digest in allowed_digests]
         if not candidates:
             return result
         referenced = self._referenced_blobs()
@@ -960,13 +1009,13 @@ class Store:
                 )
                 deleted.append((digest, row[0]))
             self.db.commit()
-        for digest, size in deleted:
-            try:
-                self.blob_path(digest).unlink()
-            except FileNotFoundError:
-                pass
-            result.blobs += 1
-            result.bytes += size
+            for digest, size in deleted:
+                try:
+                    self.blob_path(digest).unlink()
+                except FileNotFoundError:
+                    pass
+                result.blobs += 1
+                result.bytes += size
         return result
 
     def _referenced_blobs(self) -> set[str]:

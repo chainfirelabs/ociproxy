@@ -4,6 +4,7 @@ replication, revalidation, auth, GC."""
 from __future__ import annotations
 
 import hashlib
+import asyncio
 
 import httpx
 import pytest
@@ -308,7 +309,10 @@ async def test_private_pulls_gate_helm(tmp_path, helm_config, fake_upstream):
 
 
 async def test_gc_keeps_referenced_charts_and_expires_idle_ones(helm_nodes, fake_upstream):
-    primary, _ = helm_nodes
+    primary, replica = helm_nodes
+    # Keep the idle-GC test idle: replica downloads renew blob leases.
+    await asyncio.wrap_future(asyncio.run_coroutine_threadsafe(
+        replica.app_obj.tail.stop(), replica.server_loop()))
     tgz = fake_upstream.add_helm_chart("app", "1.0.0")
     digest = "sha256:" + hashlib.sha256(tgz).hexdigest()
     async with httpx.AsyncClient(timeout=30) as c:

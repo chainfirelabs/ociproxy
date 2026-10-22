@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import math
 import re
 import socket
 from dataclasses import dataclass, field
@@ -124,6 +125,9 @@ class Config:
     gc_interval: float = 3600.0
     gc_manifest_max_idle: float = 0.0  # seconds; 0 = never expire manifests
     gc_blob_grace: float = 86400.0
+    gc_disk_high_percent: float = 0.0
+    gc_disk_low_percent: float = 75.0
+    gc_max_cache_bytes: int = 0
     # Upstreams / Helm repos added in the web UI (see sources.py). When off,
     # stored ones are ignored and the UI can't add more.
     managed_sources: bool = True
@@ -242,6 +246,8 @@ def _number(name: str, value, *, minimum: float = 0.0) -> float:
         v = float(value)
     except (TypeError, ValueError):
         raise ValueError(f"{name} must be a number, got {value!r}")
+    if not math.isfinite(v):
+        raise ValueError(f"{name} must be finite")
     if v < minimum:
         raise ValueError(f"{name} must be >= {minimum:g}, got {v:g}")
     return v
@@ -343,6 +349,12 @@ def load_config(
         _env("GC_MANIFEST_MAX_IDLE_DAYS") or gc.get("manifest_max_idle_days", 0),
     )
     gc_blob_grace = _number("gc.blob_grace", _env("GC_BLOB_GRACE") or gc.get("blob_grace", 86400))
+    gc_high = _number("gc.disk_high_percent", _env("GC_DISK_HIGH_PERCENT") or gc.get("disk_high_percent", 0))
+    gc_low = _number("gc.disk_low_percent", _env("GC_DISK_LOW_PERCENT") or gc.get("disk_low_percent", 75))
+    gc_max = _number("gc.max_cache_bytes", _env("GC_MAX_CACHE_BYTES") or gc.get("max_cache_bytes", 0))
+    if (not all(math.isfinite(n) for n in (gc_high, gc_low, gc_max))
+            or gc_high > 100 or gc_low >= 100 or (gc_high and gc_low >= gc_high) or int(gc_max) != gc_max):
+        raise ValueError("invalid cleanup disk thresholds or cache byte limit")
 
     network = raw.get("network", {})
 
@@ -395,6 +407,9 @@ def load_config(
         gc_interval=gc_interval,
         gc_manifest_max_idle=gc_idle_days * 86400,
         gc_blob_grace=gc_blob_grace,
+        gc_disk_high_percent=gc_high,
+        gc_disk_low_percent=gc_low,
+        gc_max_cache_bytes=int(gc_max),
         managed_sources=managed_sources,
         replication_id=replication_id,
         replication_token=replication_token,

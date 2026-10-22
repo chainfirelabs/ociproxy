@@ -323,6 +323,10 @@ def create_app(proxy_url: str | None = None, secret: str | None = None, *,
               methods=["DELETE"]),
         Route("/api/overview", r(ui.overview), methods=["GET"]),
         Route("/api/sync", r(ui._as_user("POST", "/internal/sync"), admin=True), methods=["POST"]),
+        Route("/api/cleanup", r(ui._as_user("GET", "/internal/cleanup"), admin=True), methods=["GET"]),
+        *[Route("/api/cleanup/" + action,
+                r(ui._as_user("POST", "/internal/cleanup/" + action, body=True), admin=True), methods=["POST"])
+          for action in ("preview", "execute", "pin", "policy", "run")],
         Route("/api/images", r(ui._read_only("/internal/images", query=True)), methods=["GET"]),
         Route("/api/upstreams", r(ui._read_only("/internal/upstreams")), methods=["GET"]),
         Route("/api/users", r(ui._by_method({

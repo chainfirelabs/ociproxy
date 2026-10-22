@@ -60,6 +60,11 @@ class PrimaryClient:
             raise ValueError("incompatible replication catalog")
         return data
 
+    async def cleanup_ack(self, job_id: str, result: dict) -> None:
+        response = await self.http.post(f"{self.base_url}/replication/v2/cleanup/{job_id}/ack",
+                                        headers=self._headers, json=result)
+        response.raise_for_status()
+
     async def publish(self, kind: str, name: str, data: dict, *, delete=False) -> None:
         response = await self.http.post(f"{self.base_url}/replication/v2/sources",
             headers=self._headers, json={**data, "kind": kind, "name": name,
@@ -184,6 +189,7 @@ class ReplicaTail:
         advertised_url: str,
         fetch_blob: Callable[[str], Awaitable[Path]],
         local_sources=None,
+        cleanup=None,
     ):
         self.store = store
         self.client = client
@@ -192,6 +198,7 @@ class ReplicaTail:
         # Joins any in-flight download of the same blob (client pull, ingest).
         self.fetch_blob = fetch_blob
         self.local_sources = local_sources
+        self.cleanup = cleanup
         self._task: asyncio.Task | None = None
         self._stop = asyncio.Event()
         self.serial = int(store.get_meta(TAIL_SERIAL_KEY) or 0)
@@ -317,7 +324,13 @@ class ReplicaTail:
         """Idempotently apply one changelog event."""
         from .resolver import ResolveError
 
-        if ev.kind == "blob":
+        if ev.kind == "cleanup":
+            if self.cleanup is None or ev.bytes is None:
+                raise ValueError("public cleanup handler unavailable")
+            payload = json.loads(ev.bytes)
+            result = await asyncio.to_thread(self.cleanup.apply_public, payload)
+            await self.client.cleanup_ack(payload["job_id"], result)
+        elif ev.kind == "blob":
             if not self.store.has_blob(ev.digest):
                 try:
                     await self.fetch_blob(ev.digest)

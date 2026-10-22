@@ -129,6 +129,8 @@ GET/POST /internal/users                 local account administration
 PATCH/DELETE /internal/users/<name>      local account administration
 GET /internal/overview                   this node's state
 POST /internal/sync                      request public sync (local admin)
+GET /internal/cleanup                    local cache, pins, policy and cleanup jobs
+POST /internal/cleanup/<action>          preview/execute/pin/policy/run (local admin)
 GET /internal/images                     this node's cache
 GET /internal/upstreams                  this node's merged source list
 POST /internal/sources                   add a source (local/private by default)

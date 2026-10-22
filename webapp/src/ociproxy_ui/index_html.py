@@ -173,6 +173,7 @@ INDEX_HTML = """<!DOCTYPE html>
     <button data-view="dash" class="active">Dashboard</button>
     <button data-view="tokens">My tokens</button>
     <button data-view="users" id="nav-users" style="display:none">Users</button>
+    <button data-view="cleanup" id="nav-cleanup" style="display:none">Cleanup</button>
     <button data-view="account">Account</button>
   </nav>
   <span class="spacer"></span>
@@ -232,6 +233,41 @@ INDEX_HTML = """<!DOCTYPE html>
       <div id="images"></div>
       <div class="pager" id="pager"></div>
     </section>
+  </div>
+
+  <div class="view" id="view-cleanup">
+    <section>
+      <h2>Cache cleanup <span class="hint">Private sources and local pushes are managed on their own node.</span></h2>
+      <div id="cleanup-summary" style="padding:12px 16px"></div>
+      <form class="inline" id="cleanup-preview-form">
+        <select id="cleanup-scope" aria-label="Cleanup scope">
+          <option value="local">This node</option>
+          <option value="public" id="cleanup-public-option">Primary + all public replicas</option>
+        </select>
+        <input id="cleanup-source" placeholder="Filter source / repository" aria-label="Filter source or repository">
+        <input id="cleanup-age" type="number" min="0" value="0" aria-label="Unused for at least this many days" title="Unused for at least this many days">
+        <label><input id="cleanup-pushed" type="checkbox"> Include local pushes</label>
+        <button type="submit">Preview selected cleanup</button>
+      </form>
+      <div id="cleanup-entries" style="overflow:auto;max-height:440px"></div>
+      <div id="cleanup-preview" hidden style="padding:16px">
+        <pre id="cleanup-preview-text" style="white-space:pre-wrap"></pre>
+        <button id="cleanup-confirm" class="danger" type="button">Confirm cleanup</button>
+      </div>
+    </section>
+    <section>
+      <h2>Automatic cleanup <span class="hint">Local mirrored cache only. Pins and local pushes are protected.</span></h2>
+      <form class="inline" id="cleanup-policy-form">
+        <label>Unused days (0 = off) <input id="cleanup-retention" type="number" min="0" step="any" required></label>
+        <label>Disk high % (0 = off) <input id="cleanup-high" type="number" min="0" max="100" step="any" required></label>
+        <label>Disk low % <input id="cleanup-low" type="number" min="0" max="99.99" step="any" required></label>
+        <label>Max cache GiB (0 = off) <input id="cleanup-max" type="number" min="0" step="any" required></label>
+        <button type="submit">Save policy</button>
+        <button id="cleanup-run" type="button">Run cleanup now</button>
+      </form>
+      <p class="hint" style="padding:0 16px 12px">Disk pressure removes least recently used mirrored content. Shared layers and the blob grace period may delay reclaimed space. If background maintenance is disabled, use Run cleanup now.</p>
+    </section>
+    <section><h2>Cleanup requests</h2><div id="cleanup-jobs" style="padding:12px 16px"></div></section>
   </div>
 
   <div class="view" id="view-tokens">
@@ -605,6 +641,7 @@ async function refreshAll() {
   try {
     const view = currentView();
     if (view === 'dash') await Promise.all([loadOverview(), loadUpstreams(), loadImages()]);
+    else if (view === 'cleanup') await loadCleanup();
     else if (view === 'tokens') await loadTokens();
     else if (view === 'users') await loadUsers();
     else if (view === 'account') await loadAccount();
@@ -614,6 +651,129 @@ async function refreshAll() {
     if (me) showErr(String(e.message || e));
   }
 }
+
+// -- cache cleanup -------------------------------------------------------------
+let cleanupData = null, cleanupPreview = null, cleanupOffset = 0;
+function invalidateCleanupPreview() {
+  cleanupPreview = null;
+  document.getElementById('cleanup-preview').hidden = true;
+}
+function renderCleanupStatus(data) {
+  document.getElementById('cleanup-summary').textContent =
+    fmtBytes(data.cache.total_size) + ' cached · disk ' + data.disk.used_percent.toFixed(1) + '% used · ' +
+    fmtBytes(data.disk.free) + ' free · background interval ' + data.gc_interval + 's · blob grace ' +
+    data.blob_grace + 's' + (data.last_run && data.last_run.pressure_remaining ? ' · disk/cache limit still exceeded; protected content or grace may prevent reclamation' : '');
+  document.getElementById('cleanup-jobs').innerHTML = data.jobs.length ? data.jobs.map(job => {
+    const peers = Object.entries(job.replicas).map(([id, result]) => esc(id) + ': ' + esc(result.status) + (result.status === 'pending' && !result.online ? ' (offline)' : '')).join(' · ');
+    return '<p><span class="mono">' + esc(job.id.slice(0, 12)) + '</span> · ' + esc(job.scope) +
+      ' · ' + esc(fmtTime(job.created_at)) + ' · ' + esc(job.result.deleted) + ' entries removed · ' + esc(job.result.protected || 0) + ' protected · ' + esc(job.result.changed || 0) + ' changed · ' +
+      esc(fmtBytes(job.result.bytes || 0)) + ' reclaimed' + (peers ? '<br>' + peers : '') + '</p>';
+  }).join('') : '<p class="dim">No cleanup requests yet.</p>';
+}
+function renderCleanupEntries() {
+  if (!cleanupData) return;
+  invalidateCleanupPreview();
+  const filter = document.getElementById('cleanup-source').value.toLowerCase();
+  const age = Number(document.getElementById('cleanup-age').value || 0) * 86400;
+  const pushed = document.getElementById('cleanup-pushed').checked;
+  const shared = document.getElementById('cleanup-scope').value === 'public';
+  const entries = cleanupData.entries.map((row, index) => ({row, index})).filter(({row}) =>
+    row.target.join('/').toLowerCase().includes(filter) && (!row.pushed || (pushed && !shared)) &&
+    (!shared || row.public) && (!age || row.last_used < Date.now()/1000 - age));
+  document.getElementById('cleanup-entries').innerHTML = '<table><thead><tr><th><input id="cleanup-all" type="checkbox" aria-label="Select all visible cached entries"></th><th>Source / repository / reference</th><th>Kind</th><th>Last used</th><th>Protection</th></tr></thead><tbody>' +
+    entries.map(({row, index}) => '<tr><td><input type="checkbox" data-clean-index="' + index + '" aria-label="Select ' + esc(row.target.join('/')) + '"></td><td class="mono">' + esc(row.target.join('/')) + '</td><td>' +
+      (row.pushed ? 'Local push' : row.public ? 'Shared public' : 'Local private') + '</td><td>' + esc(fmtTime(row.last_used)) +
+      '</td><td><button type="button" data-pin-index="' + index + '">' + (row.pinned ? 'Unpin' : 'Pin') + '</button>' +
+      (row.protected ? ' protected' : '') + '</td></tr>').join('') + '</tbody></table>' +
+    '<p class="hint" style="padding:0 16px">Showing ' + entries.length + ' of ' + cleanupData.total + ' cached entries (up to 2000 per page). Image indexes include cached platform manifests during preview.</p>' +
+    '<div style="padding:12px 16px"><button type="button" id="cleanup-prev" ' + (cleanupOffset === 0 ? 'disabled' : '') + '>Previous</button> ' +
+    '<button type="button" id="cleanup-next" ' + (cleanupOffset + 2000 >= cleanupData.total ? 'disabled' : '') + '>Next</button></div>';
+  document.getElementById('cleanup-prev').onclick = () => { cleanupOffset = Math.max(0, cleanupOffset - 2000); loadCleanup().catch(e => showErr(e.message)); };
+  document.getElementById('cleanup-next').onclick = () => { cleanupOffset += 2000; loadCleanup().catch(e => showErr(e.message)); };
+  document.getElementById('cleanup-all').onchange = e => {
+    document.querySelectorAll('[data-clean-index]').forEach(box => box.checked = e.target.checked);
+    invalidateCleanupPreview();
+  };
+}
+async function loadCleanup() {
+  cleanupData = await api('/api/cleanup?offset=' + cleanupOffset);
+  renderCleanupStatus(cleanupData);
+  document.getElementById('cleanup-public-option').disabled = cleanupData.role !== 'primary';
+  if (cleanupData.role !== 'primary') document.getElementById('cleanup-scope').value = 'local';
+  document.getElementById('cleanup-retention').value = cleanupData.policy.manifest_max_idle_days;
+  document.getElementById('cleanup-high').value = cleanupData.policy.disk_high_percent;
+  document.getElementById('cleanup-low').value = cleanupData.policy.disk_low_percent;
+  document.getElementById('cleanup-max').value = cleanupData.policy.max_cache_bytes / (1024 ** 3);
+  renderCleanupEntries();
+}
+for (const id of ['cleanup-source', 'cleanup-age', 'cleanup-pushed', 'cleanup-scope']) {
+  document.getElementById(id).addEventListener('input', () => {
+    const shared = document.getElementById('cleanup-scope').value === 'public';
+    document.getElementById('cleanup-pushed').disabled = shared;
+    if (shared) document.getElementById('cleanup-pushed').checked = false;
+    renderCleanupEntries();
+  });
+}
+document.getElementById('cleanup-entries').addEventListener('change', invalidateCleanupPreview);
+document.getElementById('cleanup-entries').addEventListener('click', async e => {
+  const index = e.target.dataset.pinIndex;
+  if (index == null || !cleanupData) return;
+  const row = cleanupData.entries[Number(index)];
+  e.target.disabled = true;
+  try {
+    await api('/api/cleanup/pin', {method:'POST', json:{target:row.target, pinned:!row.pinned}});
+    await loadCleanup();
+  } catch (error) { showErr(error.message); e.target.disabled = false; }
+});
+document.getElementById('cleanup-preview-form').onsubmit = async e => {
+  e.preventDefault();
+  invalidateCleanupPreview();
+  const targets = Array.from(document.querySelectorAll('[data-clean-index]:checked')).map(box => cleanupData.entries[Number(box.dataset.cleanIndex)].target);
+  try {
+    const result = await api('/api/cleanup/preview', {method:'POST', json:{targets,
+      scope:document.getElementById('cleanup-scope').value, include_pushed:document.getElementById('cleanup-pushed').checked}});
+    cleanupPreview = result;
+    document.getElementById('cleanup-preview-text').textContent = result.count + ' cached entries selected; ' + result.blocked + ' protected/excluded.\\n' +
+      fmtBytes(result.reclaimable_bytes) + ' currently reclaimable; ' + fmtBytes(result.potential_bytes) + ' potentially unreferenced after cleanup.\\n' +
+      result.note + (result.contains_pushed ? '\\nIncludes locally pushed content: removal may be permanent.' : '') + '\\n\\n' +
+      result.targets.map(target => target.slice(0,3).join('/') + ' @ ' + target[3]).join('\\n');
+    document.getElementById('cleanup-preview').hidden = false;
+  } catch (error) { showErr(error.message); }
+};
+document.getElementById('cleanup-confirm').onclick = async e => {
+  if (!cleanupPreview) return;
+  const message = cleanupPreview.contains_pushed ? 'Permanently remove the selected local pushes and clean this cache?' :
+    'Remove the previewed cache entries? Mirrored content can download again on the next pull.';
+  if (!confirm(message)) return;
+  e.target.disabled = true;
+  try {
+    const result = await api('/api/cleanup/execute', {method:'POST', json:{preview_id:cleanupPreview.preview_id}});
+    showSyncToast('Cleanup requested: ' + result.result.deleted + ' local entries removed; ' + fmtBytes(result.result.bytes) + ' reclaimed. Replica results appear below.');
+    await loadCleanup();
+  } catch (error) { showErr(error.message); invalidateCleanupPreview(); }
+  finally { e.target.disabled = false; }
+};
+document.getElementById('cleanup-policy-form').onsubmit = async e => {
+  e.preventDefault();
+  try {
+    await api('/api/cleanup/policy', {method:'POST', json:{
+      manifest_max_idle_days:Number(document.getElementById('cleanup-retention').value),
+      disk_high_percent:Number(document.getElementById('cleanup-high').value),
+      disk_low_percent:Number(document.getElementById('cleanup-low').value),
+      max_cache_bytes:Math.round(Number(document.getElementById('cleanup-max').value) * 1024 ** 3)}});
+    showSyncToast('Local cleanup policy saved.');
+  } catch (error) { showErr(error.message); }
+};
+document.getElementById('cleanup-run').onclick = async e => {
+  e.target.disabled = true;
+  try {
+    const result = await api('/api/cleanup/run', {method:'POST', json:{}});
+    showSyncToast('Cleanup finished: ' + result.deleted + ' entries removed; ' + fmtBytes(result.bytes) + ' reclaimed.' +
+      (result.pressure_remaining ? ' Disk/cache limit remains exceeded.' : ''));
+    await loadCleanup();
+  } catch (error) { showErr(error.message); }
+  finally { e.target.disabled = false; }
+};
 
 // -- views --------------------------------------------------------------------
 
@@ -671,8 +831,9 @@ async function boot() {
   who.innerHTML = '<b>' + esc(me.username) + '</b> · ' + esc(me.role);
   who.title = me.username + ' (' + me.role + ')';
   document.getElementById('nav-users').style.display = me.role === 'admin' ? '' : 'none';
+  document.getElementById('nav-cleanup').style.display = me.role === 'admin' ? '' : 'none';
   document.getElementById('sync-now').style.display = me.role === 'admin' ? '' : 'none';
-  if (currentView() === 'users' && me.role !== 'admin') selectView('dash');
+  if (['users', 'cleanup'].includes(currentView()) && me.role !== 'admin') selectView('dash');
   await refreshAll();
   setAuto();
 }
@@ -839,7 +1000,10 @@ document.getElementById('refresh').addEventListener('click', refreshAll);
 function setAuto() {
   if (timer) { clearInterval(timer); timer = null; }
   if (document.getElementById('auto').checked) {
-    timer = setInterval(() => { if (currentView() === 'dash') refreshAll(); }, 20000);
+    timer = setInterval(() => {
+      if (currentView() === 'dash') refreshAll();
+      else if (currentView() === 'cleanup') api('/api/cleanup').then(renderCleanupStatus).catch(e => showErr(e.message));
+    }, 20000);
   }
 }
 document.getElementById('auto').addEventListener('change', setAuto);

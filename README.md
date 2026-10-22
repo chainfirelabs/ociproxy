@@ -128,6 +128,10 @@ access. New sources default to private/local.
 
 For an existing installation, also read the [OCIProxy naming upgrade notes](docs/RENAME.md).
 
+Use **Cleanup** in each node’s UI to preview cache removal, pin images/charts,
+and set retention or disk limits. The primary can request cleanup across public
+replicas. See the [cleanup guide](docs/CLEANUP.md).
+
 ## More information
 
 - [Helm configuration](docs/HELM.md) and [Secret examples](docs/SECRETS.md)

@@ -31,6 +31,7 @@ from .isolation import PROTOCOL, shared_repo
 from .accounts_api import AccountsAPI
 from .auth import AccessPolicy, Authenticator, Principal, role_at_least
 from .config import Config, validate_source_scope
+from .cleanup import Cleanup
 from .helm import INDEX_REPO, HelmResolver
 from .metrics import Metrics
 from .notify import ChangeSignal
@@ -205,6 +206,7 @@ class App:
         self.policy = AccessPolicy(config)
         self.accounts = AccountsAPI(self)
         self.sources_api = SourcesAPI(self)
+        self.cleanup = Cleanup(self.store, config)
         self.uploads: dict[str, UploadSession] = {}
         self._upload_sweeper: asyncio.Task | None = None
         self.tail: ReplicaTail | None = None
@@ -222,6 +224,7 @@ class App:
                 self.store, self.primary_client, self.node_id, advertised.rstrip("/"),
                 fetch_blob=lambda digest: self.resolver.resolve_blob("@public-feed", "", digest),
                 local_sources=self.sources,
+                cleanup=self.cleanup,
             )
             self.tail.start()
         if self.config.gc_interval > 0:
@@ -279,9 +282,9 @@ class App:
 
     async def run_maintenance(self) -> None:
         """Garbage-collect, then compact the changelog."""
-        result = await asyncio.to_thread(
-            self.store.gc, self.config.gc_manifest_max_idle, self.config.gc_blob_grace
-        )
+        cleaned = await asyncio.to_thread(self.cleanup.run)
+        from .store import GCResult
+        result = GCResult(cleaned["deleted"], cleaned["blobs"], cleaned["bytes"])
         compacted = await asyncio.to_thread(self.store.compact_changelog)
         self.metrics.inc("ociproxy_gc_runs_total")
         self.metrics.inc("ociproxy_gc_deleted_manifests_total", result.manifests)
@@ -308,6 +311,9 @@ class App:
             Route("/replication/v2/pull/blob/{digest:path}", self.internal_pull_blob, methods=["GET", "HEAD"]),
             Route("/replication/v2/catalog", self.replication_catalog, methods=["GET"]),
             Route("/replication/v2/sources", self.replication_publication, methods=["POST"]),
+            Route("/replication/v2/cleanup/{job_id}/ack", self.cleanup_ack, methods=["POST"]),
+            Route("/internal/cleanup", self.accounts._guard(self.internal_cleanup), methods=["GET"]),
+            Route("/internal/cleanup/{action}", self.accounts._guard(self.internal_cleanup), methods=["POST"]),
             Route("/internal/overview", self.internal_overview, methods=["GET"]),
             Route("/internal/sync", self.accounts._guard(self.internal_sync), methods=["POST"]),
             Route("/internal/images", self.internal_images, methods=["GET"]),
@@ -641,13 +647,9 @@ class App:
             return StreamingResponse(proof_fetch.stream(), media_type="application/octet-stream", headers=headers)
         # Local fast path: serve straight from the store (Range supported).
         path: Path | None = None
-        if self.store.has_blob(digest):
+        if self.store.has_blob(digest) and await asyncio.to_thread(self.store.touch_blob, digest):
             path = self.store.blob_path(digest)
             self.metrics.inc("ociproxy_blob_requests_total", result="hit")
-            if request.method == "HEAD" and upstream == LOCAL:
-                # A pusher checking before skipping the upload: keep the blob
-                # out of GC until its manifest arrives.
-                await asyncio.to_thread(self.store.touch_blob, digest)
 
         if path is None and request.method == "GET":
             # Stream from the source while teeing into the store: the client
@@ -1004,7 +1006,7 @@ class App:
         # Stream from upstream while teeing into the primary's store so the
         # replica (and ultimately its client) sees bytes immediately even
         # when the primary itself is cold on this blob.
-        if self.store.has_blob(digest):
+        if self.store.has_blob(digest) and self.store.touch_blob(digest):
             return FileResponse(str(self.store.blob_path(digest)),
                                media_type="application/octet-stream",
                                headers={"Docker-Content-Digest": digest})
@@ -1043,6 +1045,42 @@ class App:
         else:
             return registry_error(503, "UNAVAILABLE", "replication is not running")
         return JSONResponse({"message": message}, status_code=202)
+
+    async def internal_cleanup(self, request: Request) -> Response:
+        self.accounts._acting(request, "admin")
+        if request.method == "GET":
+            return JSONResponse(await asyncio.to_thread(self.cleanup.overview, _int_param(request, "offset", 0, 0)))
+        try:
+            data = await request.json()
+            if not isinstance(data, dict):
+                raise ValueError("a JSON object is required")
+            action = request.path_params["action"]
+            if action == "preview":
+                result = await asyncio.to_thread(self.cleanup.preview, data)
+            elif action == "execute":
+                result = await asyncio.to_thread(self.cleanup.execute, data.get("preview_id"))
+            elif action == "pin":
+                await asyncio.to_thread(self.cleanup.pin, data.get("target"), data.get("pinned"))
+                result = {"ok": True}
+            elif action == "policy":
+                result = await asyncio.to_thread(self.cleanup.set_policy, data)
+            elif action == "run":
+                result = await asyncio.to_thread(self.cleanup.run)
+            else:
+                return registry_error(404, "UNKNOWN", "unknown cleanup action")
+            return JSONResponse(result)
+        except ValueError as exc:
+            raise BadRequest(str(exc)) from exc
+
+    async def cleanup_ack(self, request: Request) -> Response:
+        if not self.check_replication(request):
+            return registry_error(403, "DENIED", "invalid replication credential")
+        try:
+            await asyncio.to_thread(self.cleanup.acknowledge, request.path_params["job_id"],
+                                    request.headers["x-ociproxy-peer"], await request.json())
+        except ValueError as exc:
+            raise BadRequest(str(exc)) from exc
+        return JSONResponse({"ok": True})
 
     async def internal_overview(self, request: Request) -> Response:
         if not self.check_internal(request):
