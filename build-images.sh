@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build (and optionally push) both containerproxy images.
+# Build (and optionally push) both ociproxy images.
 #
 #   ./build-images.sh            build only
 #   ./build-images.sh --push     build and push
@@ -8,7 +8,7 @@
 # REGISTRY overrides the image prefix.
 set -euo pipefail
 
-REGISTRY=${REGISTRY:-containerproxy}
+REGISTRY=${REGISTRY:-ociproxy}
 PUSH=false
 [[ ${1:-} == --push ]] && PUSH=true
 
@@ -23,7 +23,7 @@ fi
 
 # image name | Dockerfile | build context
 # The UI MUST be built from webapp/: from the repo root it would package
-# the proxy instead and fail with "No module named containerproxy_ui".
+# the proxy instead and fail with "No module named ociproxy_ui".
 BUILDS=(
   "$REGISTRY|docker/Dockerfile|."
   "$REGISTRY/ui|docker/Dockerfile.ui|webapp"

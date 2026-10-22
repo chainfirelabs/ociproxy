@@ -3,9 +3,9 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "containerproxy"
+name = "ociproxy"
 version = "0.1.0"
-description = "ContainerProxy — primary/replica pull-through container registry (devpi-style)"
+description = "OCIProxy — primary/replica pull-through container registry (devpi-style)"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
@@ -29,7 +29,7 @@ dependencies = [
 test = ["pytest>=8", "pytest-asyncio>=0.23"]
 
 [project.scripts]
-containerproxy = "containerproxy.cli:main"
+ociproxy = "ociproxy.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -11,10 +11,10 @@ __pycache__/
 .pytest_cache/
 tests/
 docker-compose.yml
-containerproxy.toml.example
+ociproxy.toml.example
 
 # Keep local configuration and environments out of the build context.
 .venv/
-containerproxy*.toml
+*proxy*.toml
 *.pem
 *.key

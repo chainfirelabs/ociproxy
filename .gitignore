@@ -1,5 +1,5 @@
 .env
-containerproxy.toml
+*proxy.toml
 __pycache__/
 **/__pycache__/
 *.pyc
@@ -17,4 +17,4 @@ dist/
 *.pem
 *.key
 
-containerproxy-replica*.toml
+*proxy-replica*.toml

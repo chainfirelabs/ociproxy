@@ -8,8 +8,8 @@ import json
 import httpx
 import pytest
 
-from containerproxy.api import App
-from containerproxy.upstream import DEFAULT_ACCEPT
+from ociproxy.api import App
+from ociproxy.upstream import DEFAULT_ACCEPT
 
 from .conftest import Node, free_port, make_config
 from .fake_upstream import MANIFEST_LIST, MANIFEST_V2
@@ -116,7 +116,7 @@ async def test_digest_references_are_never_revalidated(tmp_path, fake_upstream, 
 
 
 async def test_repushed_local_tags_are_independent(primary, replica):
-    from containerproxy.auth import create_user
+    from ociproxy.auth import create_user
     create_user(replica.app_obj.store, "replica-pusher", "pusher", "replica-password")
 
     async def push_manifest(c, payload: bytes, auth=AUTH) -> str:

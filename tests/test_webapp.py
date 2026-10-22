@@ -6,15 +6,15 @@ from urllib.parse import urlsplit
 
 import httpx
 import pytest
-from containerproxy_ui.app import create_app
-from containerproxy_ui.oidc import OIDCSettings
+from ociproxy_ui.app import create_app
+from ociproxy_ui.oidc import OIDCSettings
 
-from containerproxy.auth import create_user
+from ociproxy.auth import create_user
 
 from .conftest import SECRET
 from .fake_oidc import CLIENT_ID, CLIENT_SECRET, FakeOIDC
 
-CSRF = {"X-Requested-With": "containerproxy"}
+CSRF = {"X-Requested-With": "ociproxy"}
 
 
 def ui_client(proxy_url: str, secret: str = SECRET, **kw) -> httpx.AsyncClient:
@@ -35,7 +35,7 @@ async def test_ui_serves_dashboard(primary):
         r = await c.get("/")
         assert r.status_code == 200
         assert r.headers["content-type"].startswith("text/html")
-        assert "containerproxy" in r.text.lower()
+        assert "ociproxy" in r.text.lower()
         assert "Stored images" in r.text and "Sign in" in r.text
         assert r.headers["x-frame-options"] == "DENY"
         assert r.headers["referrer-policy"] == "no-referrer"
@@ -143,18 +143,18 @@ async def test_ui_requires_csrf_header_on_state_changes(primary):
 async def test_ui_session_cookie_cannot_be_forged(primary):
     async with ui_client(primary.url) as c:
         await login(c)
-        good = c.cookies["cp_session"]
+        good = c.cookies["oci_session"]
         body, sig = good.rsplit(".", 1)
         c.cookies.clear()
-        c.cookies.set("cp_session", body + "." + sig[::-1])
+        c.cookies.set("oci_session", body + "." + sig[::-1])
         assert (await c.get("/api/me")).status_code == 401
         # a valid signature over a different user: rejected as well
         c.cookies.clear()
-        c.cookies.set("cp_session", "eyJ1IjoiYWRtaW4iLCJleHAiOjk5OTk5OTk5OTl9." + sig)
+        c.cookies.set("oci_session", "eyJ1IjoiYWRtaW4iLCJleHAiOjk5OTk5OTk5OTl9." + sig)
         assert (await c.get("/api/me")).status_code == 401
     # a cookie from a UI keyed with another secret is worthless here
     async with ui_client(primary.url, secret="other-secret") as other:
-        other.cookies.set("cp_session", good)
+        other.cookies.set("oci_session", good)
         assert (await other.get("/api/me")).status_code == 401
 
 
@@ -344,7 +344,7 @@ async def test_oidc_never_takes_over_local_account(primary, idp):
 
 
 def test_oidc_requires_https_issuer():
-    from containerproxy_ui.oidc import OIDCClient
+    from ociproxy_ui.oidc import OIDCClient
 
     s = OIDCSettings(issuer="http://auth.example/application/o/x", client_id="c",
                      client_secret="s", redirect_uri="https://ui/auth/oidc/callback")

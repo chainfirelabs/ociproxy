@@ -1,4 +1,4 @@
-# ContainerProxy Helm chart
+# OCIProxy Helm chart
 
 Deploy **one independent node per release**, with a node-local UI, accounts,
 credentials and data. Chart 0.3 changes the deployment and replication model;
@@ -7,14 +7,14 @@ volumes. Do not mix legacy nodes with public-v2 nodes.
 
 ## Primary
 
-Images use [GitHub Container Registry](https://github.com/chainfirelabs/containerproxy/pkgs/container/containerproxy).
+Images use [GitHub Container Registry](https://github.com/chainfirelabs/ociproxy/pkgs/container/ociproxy).
 Replace `YOUR_TAG` with a published tag. The current GitHub workflow builds only;
 these paths become pullable after image publication.
 
 ```sh
-helm install cp charts/containerproxy --namespace registry --create-namespace \
-  --set image.repository=ghcr.io/chainfirelabs/containerproxy \
-  --set ui.image.repository=ghcr.io/chainfirelabs/containerproxy/ui \
+helm install cp charts/ociproxy --namespace registry --create-namespace \
+  --set image.repository=ghcr.io/chainfirelabs/ociproxy \
+  --set ui.image.repository=ghcr.io/chainfirelabs/ociproxy/ui \
   --set image.tag=YOUR_TAG --set ui.image.tag=YOUR_TAG
 ```
 
@@ -35,11 +35,11 @@ replication:
 ## Each replica is a separate release
 
 ```sh
-helm install site-a charts/containerproxy --namespace registry \
+helm install site-a charts/ociproxy --namespace registry \
   --set primary.enabled=false --set replica.enabled=true \
   --set replica.primaryUrl=https://primary.example.com \
-  --set image.repository=ghcr.io/chainfirelabs/containerproxy \
-  --set ui.image.repository=ghcr.io/chainfirelabs/containerproxy/ui \
+  --set image.repository=ghcr.io/chainfirelabs/ociproxy \
+  --set ui.image.repository=ghcr.io/chainfirelabs/ociproxy/ui \
   --set image.tag=YOUR_TAG --set ui.image.tag=YOUR_TAG
 ```
 
@@ -82,5 +82,5 @@ Helm servers, auth/CDN hosts and any proxy. DNS rules are included automatically
 No primary-to-replica fan-out connection or credential is needed.
 
 Persistence, probes, resource limits, ingress, ServiceMonitor and OIDC settings
-are in [values.yaml](../charts/containerproxy/values.yaml). Configure them per node/release. Registry authentication
+are in [values.yaml](../charts/ociproxy/values.yaml). Configure them per node/release. Registry authentication
 and UI identities are local even when public cached content is shared.

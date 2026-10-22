@@ -3,30 +3,32 @@
 # Replicas have egress for their node-local Docker/Helm sources.
 # See docs/ISOLATION.md before upgrading an existing data volume.
 
+name: ociproxy
+
 x-node-env: &node-env
   # Local primary/UI administration secret. Replicas override this value.
-  CONTAINERPROXY_SECRET: ${CONTAINERPROXY_SECRET:?set CONTAINERPROXY_SECRET in .env (openssl rand -hex 32)}
+  OCIPROXY_SECRET: ${OCIPROXY_SECRET:?set OCIPROXY_SECRET in .env (openssl rand -hex 32)}
   # Local bootstrap admin. Each replica overrides the password. Create day-to-day
-  # users with `containerproxy user add` or in the web UI.
-  CONTAINERPROXY_PUSH_USERNAME: ${PUSH_USERNAME:-ci}
-  CONTAINERPROXY_PUSH_PASSWORD: ${PUSH_PASSWORD:?set PUSH_PASSWORD in .env}
+  # users with `ociproxy user add` or in the web UI.
+  OCIPROXY_PUSH_USERNAME: ${PUSH_USERNAME:-ci}
+  OCIPROXY_PUSH_PASSWORD: ${PUSH_PASSWORD:?set PUSH_PASSWORD in .env}
   # Visibility of repos no [access] rule / upstream / helm entry sets:
   # "public" (anonymous pulls) or "private" (signed-in users only).
   # Each node enforces its own visibility and accounts.
   # (Older .env files: PULL_AUTH=none|basic still works when this is unset.)
-  CONTAINERPROXY_DEFAULT_VISIBILITY: ${DEFAULT_VISIBILITY:-}
-  CONTAINERPROXY_PULL_AUTH: ${PULL_AUTH:-none}
+  OCIPROXY_DEFAULT_VISIBILITY: ${DEFAULT_VISIBILITY:-}
+  OCIPROXY_PULL_AUTH: ${PULL_AUTH:-none}
   # Seconds a cached tag is served before it is revalidated upstream.
-  CONTAINERPROXY_TAG_TTL: ${TAG_TTL:-300}
+  OCIPROXY_TAG_TTL: ${TAG_TTL:-300}
   # Expire mirrored images not pulled for N days (0 = keep forever).
-  CONTAINERPROXY_GC_MANIFEST_MAX_IDLE_DAYS: ${GC_MANIFEST_MAX_IDLE_DAYS:-0}
-  CONTAINERPROXY_LOG_FORMAT: ${LOG_FORMAT:-text}
+  OCIPROXY_GC_MANIFEST_MAX_IDLE_DAYS: ${GC_MANIFEST_MAX_IDLE_DAYS:-0}
+  OCIPROXY_LOG_FORMAT: ${LOG_FORMAT:-text}
 
 x-node: &node
   build:
     context: .
     dockerfile: docker/Dockerfile
-  image: containerproxy:latest
+  image: ociproxy:latest
   restart: unless-stopped
   read_only: true
   tmpfs:
@@ -54,13 +56,13 @@ services:
     <<: *node
     environment:
       <<: *node-env
-      CONTAINERPROXY_ROLE: primary
-      CONTAINERPROXY_REPLICATION_PEERS: >-
+      OCIPROXY_ROLE: primary
+      OCIPROXY_REPLICATION_PEERS: >-
         {"replica1":{"token":"${REPLICA1_REPLICATION_TOKEN:?set a unique replica1 replication token}","publish":true},"replica2":{"token":"${REPLICA2_REPLICATION_TOKEN:?set a unique replica2 replication token}","publish":true}}
-      CONTAINERPROXY_ADVERTISED_URL: http://primary:5000
+      OCIPROXY_ADVERTISED_URL: http://primary:5000
       # Proxy for upstream registry / Helm repo fetches only (e.g. a squid at
       # http://proxy.corp:3128). Node-to-node traffic is never proxied.
-      CONTAINERPROXY_UPSTREAM_PROXY: ${UPSTREAM_PROXY:-}
+      OCIPROXY_UPSTREAM_PROXY: ${UPSTREAM_PROXY:-}
       # Alternatively the standard variables (also only used for upstreams):
       HTTP_PROXY: ${HTTP_PROXY:-}
       HTTPS_PROXY: ${HTTPS_PROXY:-}
@@ -69,49 +71,49 @@ services:
     ports:
       - "${PRIMARY_PORT:-5000}:5000"
     volumes:
-      - ./containerproxy.toml:/app/containerproxy.toml:ro
-      - primary-data:/var/lib/containerproxy
+      - ./ociproxy.toml:/app/ociproxy.toml:ro
+      - primary-data:/var/lib/ociproxy
 
   replica1:
     <<: *replica
     environment:
       <<: *node-env
-      CONTAINERPROXY_ROLE: replica
-      CONTAINERPROXY_PRIMARY_URL: http://primary:5000
+      OCIPROXY_ROLE: replica
+      OCIPROXY_PRIMARY_URL: http://primary:5000
       # Node address for the public replication status display.
-      CONTAINERPROXY_ADVERTISED_URL: http://replica1:5000
-      CONTAINERPROXY_SECRET: ${REPLICA1_SECRET:?set an independent replica1 local secret}
-      CONTAINERPROXY_PUSH_PASSWORD: ${REPLICA1_PUSH_PASSWORD:?set replica1 bootstrap password}
-      CONTAINERPROXY_REPLICATION_ID: replica1
-      CONTAINERPROXY_REPLICATION_TOKEN: ${REPLICA1_REPLICATION_TOKEN:?set replica1 replication token}
+      OCIPROXY_ADVERTISED_URL: http://replica1:5000
+      OCIPROXY_SECRET: ${REPLICA1_SECRET:?set an independent replica1 local secret}
+      OCIPROXY_PUSH_PASSWORD: ${REPLICA1_PUSH_PASSWORD:?set replica1 bootstrap password}
+      OCIPROXY_REPLICATION_ID: replica1
+      OCIPROXY_REPLICATION_TOKEN: ${REPLICA1_REPLICATION_TOKEN:?set replica1 replication token}
     ports:
       - "${REPLICA1_PORT:-5001}:5000"
     volumes:
-      - ${REPLICA1_CONFIG:-./containerproxy.replica.toml.example}:/app/containerproxy.toml:ro
-      - replica1-data:/var/lib/containerproxy
+      - ${REPLICA1_CONFIG:-./ociproxy.replica.toml.example}:/app/ociproxy.toml:ro
+      - replica1-data:/var/lib/ociproxy
 
   replica2:
     <<: *replica
     environment:
       <<: *node-env
-      CONTAINERPROXY_ROLE: replica
-      CONTAINERPROXY_PRIMARY_URL: http://primary:5000
-      CONTAINERPROXY_ADVERTISED_URL: http://replica2:5000
-      CONTAINERPROXY_SECRET: ${REPLICA2_SECRET:?set an independent replica2 local secret}
-      CONTAINERPROXY_PUSH_PASSWORD: ${REPLICA2_PUSH_PASSWORD:?set replica2 bootstrap password}
-      CONTAINERPROXY_REPLICATION_ID: replica2
-      CONTAINERPROXY_REPLICATION_TOKEN: ${REPLICA2_REPLICATION_TOKEN:?set replica2 replication token}
+      OCIPROXY_ROLE: replica
+      OCIPROXY_PRIMARY_URL: http://primary:5000
+      OCIPROXY_ADVERTISED_URL: http://replica2:5000
+      OCIPROXY_SECRET: ${REPLICA2_SECRET:?set an independent replica2 local secret}
+      OCIPROXY_PUSH_PASSWORD: ${REPLICA2_PUSH_PASSWORD:?set replica2 bootstrap password}
+      OCIPROXY_REPLICATION_ID: replica2
+      OCIPROXY_REPLICATION_TOKEN: ${REPLICA2_REPLICATION_TOKEN:?set replica2 replication token}
     ports:
       - "${REPLICA2_PORT:-5002}:5000"
     volumes:
-      - ${REPLICA2_CONFIG:-./containerproxy.replica.toml.example}:/app/containerproxy.toml:ro
-      - replica2-data:/var/lib/containerproxy
+      - ${REPLICA2_CONFIG:-./ociproxy.replica.toml.example}:/app/ociproxy.toml:ro
+      - replica2-data:/var/lib/ociproxy
 
   ui: &ui
     build:
       context: ./webapp
       dockerfile: ../docker/Dockerfile.ui
-    image: containerproxy-ui:latest
+    image: ociproxy-ui:latest
     restart: unless-stopped
     read_only: true
     tmpfs:
@@ -122,10 +124,10 @@ services:
       primary:
         condition: service_healthy
     environment:
-      CONTAINERPROXY_URL: http://primary:5000
+      OCIPROXY_URL: http://primary:5000
       # The UI adds this header on internal calls; the browser never sees it.
       # It also keys the UI's session cookies.
-      CONTAINERPROXY_SECRET: ${CONTAINERPROXY_SECRET:?set CONTAINERPROXY_SECRET in .env}
+      OCIPROXY_SECRET: ${OCIPROXY_SECRET:?set OCIPROXY_SECRET in .env}
       # How browsers reach the UI. Required for single sign-on; https here
       # also marks session cookies Secure.
       UI_PUBLIC_URL: ${UI_PUBLIC_URL:-}
@@ -151,8 +153,8 @@ services:
       replica1:
         condition: service_healthy
     environment:
-      CONTAINERPROXY_URL: http://replica1:5000
-      CONTAINERPROXY_SECRET: ${REPLICA1_SECRET:?set replica1 local secret}
+      OCIPROXY_URL: http://replica1:5000
+      OCIPROXY_SECRET: ${REPLICA1_SECRET:?set replica1 local secret}
       UI_PUBLIC_URL: ${REPLICA1_UI_PUBLIC_URL:-}
     ports:
       - "${REPLICA1_UI_PORT:-8081}:8080"
@@ -163,8 +165,8 @@ services:
       replica2:
         condition: service_healthy
     environment:
-      CONTAINERPROXY_URL: http://replica2:5000
-      CONTAINERPROXY_SECRET: ${REPLICA2_SECRET:?set replica2 local secret}
+      OCIPROXY_URL: http://replica2:5000
+      OCIPROXY_SECRET: ${REPLICA2_SECRET:?set replica2 local secret}
       UI_PUBLIC_URL: ${REPLICA2_UI_PUBLIC_URL:-}
     ports:
       - "${REPLICA2_UI_PORT:-8082}:8080"

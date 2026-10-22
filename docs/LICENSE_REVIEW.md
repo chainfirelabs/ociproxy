@@ -2,7 +2,7 @@
 
 ## Conclusion and scope
 
-ContainerProxy's original Python code, inline UI code, documentation, build
+OCIProxy's original Python code, inline UI code, documentation, build
 scripts and chart can be offered under MIT, with ChainFire Labs LLC as the
 copyright holder, assuming the company owns or has permission to license those
 contributions. No reviewed Python runtime dependency requires the original
@@ -41,7 +41,7 @@ is not a license for everything inside its container images.
   upstream main and does not establish that version.
 - Extracted legal notices and package versions from the exact pinned amd64
   Distroless base. Both Dockerfiles retain all inherited base files and installed
-  dependency metadata, and add notices at `/usr/share/licenses/containerproxy/`.
+  dependency metadata, and add notices at `/usr/share/licenses/ociproxy/`.
 
 ## Python runtime license summary
 
@@ -104,7 +104,7 @@ start distributing those tools, their vendored code, or build-stage images.
 ## Assets and provenance
 
 The project owner confirmed that `logo-banner.png` and
-`webapp/src/containerproxy_ui/logo.png` depict the ChainFire Labs LLC company
+`webapp/src/ociproxy_ui/logo.png` depict the ChainFire Labs LLC company
 logo, which they personally designed. These are company assets, rather than
 unidentified third-party artwork. The outstanding logo ownership and
 redistribution provenance item is resolved based on that confirmation.

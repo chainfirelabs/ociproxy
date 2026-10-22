@@ -1,7 +1,7 @@
 # Existing authentication Secret examples
 
-Use the [primary Secret](../charts/containerproxy/examples/primary-auth-secret.example.yaml)
-and [replica Secret](../charts/containerproxy/examples/replica-auth-secret.example.yaml) templates.
+Use the [primary Secret](../charts/ociproxy/examples/primary-auth-secret.example.yaml)
+and [replica Secret](../charts/ociproxy/examples/replica-auth-secret.example.yaml) templates.
 
 These files contain placeholders, not usable credentials. Copy them to a private
 location outside the repository, replace every placeholder, and adjust namespaces
@@ -13,7 +13,7 @@ Both releases should use:
 
 ```yaml
 auth:
-  existingSecret: containerproxy-auth
+  existingSecret: ociproxy-auth
 ```
 
 The replica must additionally use:

@@ -1,0 +1,36 @@
+{{- range $component := list "primary" "replica" "ui" }}
+{{- $ing := index $.Values.ingress $component }}
+{{- if and $ing.enabled (index $.Values $component).enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "ociproxy.fullname" $ }}-{{ $component }}
+  labels:
+    {{- include "ociproxy.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $component }}
+  {{- with $ing.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with $ing.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- with $ing.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    - host: {{ required (printf "ingress.%s.host is required" $component) $ing.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "ociproxy.fullname" $ }}-{{ $component }}
+                port:
+                  name: http
+{{- end }}
+{{- end }}

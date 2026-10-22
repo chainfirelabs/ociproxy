@@ -1,6 +1,6 @@
 # Third-party notices
 
-ContainerProxy's original code is Copyright (c) 2026 ChainFire Labs LLC and
+OCIProxy's original code is Copyright (c) 2026 ChainFire Labs LLC and
 licensed under MIT. Dependencies, bundled libraries and base-image components
 retain their own licenses and copyright notices; they are not relicensed MIT.
 
@@ -48,7 +48,7 @@ GPL/LGPL-covered components. Preserve `/usr/share/doc/*/copyright`,
 `/usr/share/common-licenses/`, Python's license and installed dependency
 `.dist-info` directories. Do not describe the entire image as MIT-only.
 
-Project license and notices are in `/usr/share/licenses/containerproxy/`.
+Project license and notices are in `/usr/share/licenses/ociproxy/`.
 Dependency wheel notices also remain in `/app/site-packages/*.dist-info/`.
 See the repository's [license review](../../docs/LICENSE_REVIEW.md) for exact base-image review scope and
 source-distribution requirements before publishing container binaries.

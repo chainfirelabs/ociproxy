@@ -9,8 +9,8 @@ import httpx
 import pytest
 import yaml
 
-from containerproxy.config import HelmRepoConfig, load_config
-from containerproxy.helm import INDEX_REF, INDEX_REPO, pointer_blob, rewrite_index
+from ociproxy.config import HelmRepoConfig, load_config
+from ociproxy.helm import INDEX_REF, INDEX_REPO, pointer_blob, rewrite_index
 
 from .conftest import Node, free_port, make_config, wait_until
 
@@ -103,7 +103,7 @@ generated: 2026-01-02T03:04:05Z
 
 
 def test_rewrite_rejects_non_index():
-    from containerproxy.resolver import ResolveError
+    from ociproxy.resolver import ResolveError
 
     with pytest.raises(ResolveError):
         rewrite_index(b"- just\n- a list\n", "https://x")
@@ -334,9 +334,9 @@ async def test_helm_records_stay_out_of_registry_catalog(helm_nodes, fake_upstre
         r = await c.get(f"{primary.url}/v2/_catalog")
         assert r.json()["repositories"] == []
         # but the admin surface lists them
-        r = await c.get(f"{primary.url}/internal/images", headers={"X-ContainerProxy-Secret": "test-secret"})
+        r = await c.get(f"{primary.url}/internal/images", headers={"X-OCIProxy-Secret": "test-secret"})
         assert {m["upstream"] for m in r.json()["items"]} == {"helm/stable"}
-        r = await c.get(f"{primary.url}/internal/upstreams", headers={"X-ContainerProxy-Secret": "test-secret"})
+        r = await c.get(f"{primary.url}/internal/upstreams", headers={"X-OCIProxy-Secret": "test-secret"})
         assert [(u["kind"], u["prefix"]) for u in r.json()["items"]] == [("helm", "helm/stable")]
 
 
@@ -348,7 +348,7 @@ def test_helm_repos_from_toml_and_env(tmp_path, monkeypatch):
                    'base_url = "https://charts.bitnami.com/bitnami/"\n')
     c = load_config(str(cfg))
     assert c.helm_repos == [HelmRepoConfig("bitnami", "https://charts.bitnami.com/bitnami")]
-    monkeypatch.setenv("CONTAINERPROXY_HELM_REPOS",
+    monkeypatch.setenv("OCIPROXY_HELM_REPOS",
                        '[{"name": "jetstack", "base_url": "https://charts.jetstack.io",'
                        ' "username": "u", "password": "p"}]')
     c = load_config(str(cfg))
@@ -362,13 +362,13 @@ def test_helm_repos_from_toml_and_env(tmp_path, monkeypatch):
 def test_helm_repo_validation(tmp_path, monkeypatch, entry, match):
     import json
 
-    monkeypatch.setenv("CONTAINERPROXY_HELM_REPOS", json.dumps([entry]))
+    monkeypatch.setenv("OCIPROXY_HELM_REPOS", json.dumps([entry]))
     with pytest.raises(ValueError, match=match):
         load_config(None)
 
 
 def test_duplicate_helm_repo_rejected(monkeypatch):
-    monkeypatch.setenv("CONTAINERPROXY_HELM_REPOS",
+    monkeypatch.setenv("OCIPROXY_HELM_REPOS",
                        '[{"name": "a", "base_url": "https://x"}, {"name": "a", "base_url": "https://y"}]')
     with pytest.raises(ValueError, match="duplicate"):
         load_config(None)

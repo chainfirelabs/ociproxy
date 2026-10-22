@@ -4,7 +4,7 @@
 # To update: skopeo inspect --raw docker://<image:tag> | sha256sum
 # Keep the builder's Python minor version equal to the runtime's (3.13).
 
-# Build stage: install containerproxy-ui + deps into an isolated directory.
+# Build stage: install ociproxy-ui + deps into an isolated directory.
 # All runtime deps (starlette, uvicorn, httpx) are pure Python, so the
 # tree is portable into the distroless python3 image.
 FROM python:3.13-slim-trixie@sha256:8d9d0b8bcf6506481eae4907c18f5e3e7902e629f5f6d684f9e7c32e85e3ddf0 AS builder
@@ -28,13 +28,13 @@ ENV PYTHONPATH=/app/site-packages \
     PYTHONDONTWRITEBYTECODE=1 \
     UI_LISTEN=0.0.0.0 \
     UI_PORT=8080 \
-    CONTAINERPROXY_URL=http://primary:5000
+    OCIPROXY_URL=http://primary:5000
 
 COPY --from=builder /staged /app/site-packages
 # Preserve project, dependency and supplemental third-party license notices.
-COPY --from=builder /build/LICENSE /build/THIRD_PARTY_NOTICES.md /usr/share/licenses/containerproxy/
-COPY --from=builder /build/third_party/ /usr/share/licenses/containerproxy/third_party/
+COPY --from=builder /build/LICENSE /build/THIRD_PARTY_NOTICES.md /usr/share/licenses/ociproxy/
+COPY --from=builder /build/third_party/ /usr/share/licenses/ociproxy/third_party/
 
 EXPOSE 8080
 
-ENTRYPOINT ["/usr/bin/python3", "-m", "containerproxy_ui"]
+ENTRYPOINT ["/usr/bin/python3", "-m", "ociproxy_ui"]

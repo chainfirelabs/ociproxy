@@ -8,11 +8,11 @@ import json
 import httpx
 import pytest
 
-from containerproxy.sources import CredentialBox
+from ociproxy.sources import CredentialBox
 
 from .conftest import SECRET, Node, free_port, make_config, make_replica, wait_until
 
-ADMIN = {"X-ContainerProxy-Secret": SECRET, "X-ContainerProxy-Acting-User": "ci"}
+ADMIN = {"X-OCIProxy-Secret": SECRET, "X-OCIProxy-Acting-User": "ci"}
 
 
 def _fake_url(fake_upstream, path: str = "") -> str:
@@ -162,17 +162,17 @@ async def test_config_entries_are_read_only(primary):
 
 
 async def test_admin_role_secret_and_primary_are_required(primary, replica):
-    from containerproxy.auth import create_user
+    from ociproxy.auth import create_user
 
     create_user(primary.app_obj.store, "pat", "pusher", "pusherpass1")
     body = {"kind": "oci", "name": "x", "base_url": "https://r.example"}
     async with httpx.AsyncClient() as c:
         r = await c.post(f"{primary.url}/internal/sources", json=body,
-                         headers={**ADMIN, "X-ContainerProxy-Acting-User": "pat"})
+                         headers={**ADMIN, "X-OCIProxy-Acting-User": "pat"})
         assert r.status_code == 403
         r = await c.post(f"{primary.url}/internal/sources", json=body,
-                         headers={"X-ContainerProxy-Secret": "wrong",
-                                  "X-ContainerProxy-Acting-User": "ci"})
+                         headers={"X-OCIProxy-Secret": "wrong",
+                                  "X-OCIProxy-Acting-User": "ci"})
         assert r.status_code == 403
         assert (await _create(c, replica, **body)).status_code == 403
         create_user(replica.app_obj.store, "ci", "admin", "replica-admin-password")
@@ -184,7 +184,7 @@ async def test_shadowed_by_a_later_config_entry(primary, fake_upstream):
         assert (await _create(c, primary, kind="oci", name="later",
                               base_url=_fake_url(fake_upstream))).status_code == 201
     # The operator then adds the same name to the configuration.
-    from containerproxy.config import UpstreamConfig
+    from ociproxy.config import UpstreamConfig
 
     registry = primary.app_obj.sources
     registry.static_upstreams.append(
@@ -331,7 +331,7 @@ async def test_probe(primary, fake_upstream):
 # -- changelog --------------------------------------------------------------------------------
 
 def test_compaction_keeps_newest_source_event(tmp_path):
-    from containerproxy.store import Store
+    from ociproxy.store import Store
     store = Store(str(tmp_path / "s"))
     for i in range(3):
         store.publish_config_sources({"protocol":"public-v2","upstreams":[{"name":"a", "base_url":f"https://{i}.example", "sharing":"public", "visibility":"public"}], "helm":[]})
@@ -347,7 +347,7 @@ def test_compaction_keeps_newest_source_event(tmp_path):
 # -- the primary's config-file list ------------------------------------------------
 
 async def test_replica_uses_the_primarys_configured_sources(tmp_path, fake_upstream):
-    from containerproxy.config import HelmRepoConfig, UpstreamConfig
+    from ociproxy.config import HelmRepoConfig, UpstreamConfig
 
     img = fake_upstream.install_image(repo="team/app", tag="v1")
     fake_upstream.add_helm_chart("mychart", "1.0.0")
@@ -400,7 +400,7 @@ async def test_replica_uses_the_primarys_configured_sources(tmp_path, fake_upstr
 
 
 def test_config_sources_are_published_only_when_changed(tmp_path):
-    from containerproxy.config import UpstreamConfig
+    from ociproxy.config import UpstreamConfig
 
     def boot(upstreams):
         node = Node(make_config(tmp_path, "primary", name="p", upstreams=upstreams))
@@ -429,3 +429,11 @@ async def test_replica_managed_switch_is_independent(tmp_path, primary, fake_ups
         assert primary.app_obj.config.upstream_by_prefix("m") is None
     finally:
         replica.stop()
+
+
+def test_v1_encrypted_credentials_survive_product_rename():
+    # A fixture produced before the rename, with synthetic credentials only.
+    sealed = 'v1:++FWTpA/7JcEwloDklE41ybz/C1YNciEVz2IP7OOnC1FUzOOqlvUW1Hcg2pVK1LVJFHeCekEmvSbJwyj2u0CYgUfRE0dNW/Hiv0X2eecgtD0aflAbxBWGQ=='
+    box = CredentialBox("rename-compatibility-test-secret")
+    assert box.open("oci", "compat-source", sealed) == ("fixture-user", "fixture-password")
+    assert box.open("oci", "different-source", sealed) is None

@@ -7,8 +7,8 @@ import json
 import httpx
 import pytest
 
-from containerproxy.auth import create_user, create_token
-from containerproxy.config import Config, UpstreamConfig, HelmRepoConfig
+from ociproxy.auth import create_user, create_token
+from ociproxy.config import Config, UpstreamConfig, HelmRepoConfig
 from .conftest import Node, free_port, wait_until
 
 
@@ -40,17 +40,17 @@ def cluster(tmp_path, fake_upstream):
 
 
 def local_headers(index):
-    return {'X-ContainerProxy-Secret': f'local-admin-secret-{index}',
-            'X-ContainerProxy-Acting-User': 'admin'}
+    return {'X-OCIProxy-Secret': f'local-admin-secret-{index}',
+            'X-OCIProxy-Acting-User': 'admin'}
 
 
 def peer_headers(index):
-    return {'Authorization': f'Bearer peer-token-{index}', 'X-ContainerProxy-Peer': f'node{index}'}
+    return {'Authorization': f'Bearer peer-token-{index}', 'X-OCIProxy-Peer': f'node{index}'}
 
 
 @pytest.mark.parametrize('index', [0, 1])
 async def test_sync_now_refreshes_replica_catalog_with_local_admin_only(cluster, monkeypatch, index):
-    from containerproxy_ui.app import create_app
+    from ociproxy_ui.app import create_app
     nodes, _ = cluster
     tail = nodes[1].app_obj.tail
     await wait_until(lambda: tail.primary_serial is not None)
@@ -65,7 +65,7 @@ async def test_sync_now_refreshes_replica_catalog_with_local_admin_only(cluster,
     monkeypatch.setattr(tail.client, 'catalog', catalog)
     create_user(nodes[index].app_obj.store, 'sync-reader', 'reader', 'sync-reader-password')
     app = create_app(proxy_url=nodes[index].url, secret=nodes[index].config.secret)
-    csrf = {'X-Requested-With': 'containerproxy'}
+    csrf = {'X-Requested-With': 'ociproxy'}
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://ui') as c:
         assert (await c.post('/api/sync', headers=csrf)).status_code == 401
         await c.post('/api/auth/login', headers=csrf,
@@ -82,7 +82,7 @@ async def test_sync_now_refreshes_replica_catalog_with_local_admin_only(cluster,
     await app.state.ui.aclose()
     async with httpx.AsyncClient(trust_env=False) as c:
         assert (await c.post(nodes[index].url+'/internal/sync', headers=peer_headers(1))).status_code == 403
-        headers = {**local_headers(index), 'X-ContainerProxy-Acting-User': 'sync-reader'}
+        headers = {**local_headers(index), 'X-OCIProxy-Acting-User': 'sync-reader'}
         assert (await c.post(nodes[index].url+'/internal/sync', headers=headers)).status_code == 403
 
 
@@ -193,7 +193,7 @@ async def test_replication_credentials_never_authorize_private_or_admin(cluster)
     async with httpx.AsyncClient(trust_env=False, timeout=20) as c:
         primary = nodes[0]
         assert (await c.get(primary.url+'/replication/v2/catalog',headers=local_headers(0))).status_code == 403
-        assert (await c.get(primary.url+'/internal/users',headers={**peer_headers(1), 'X-ContainerProxy-Acting-User':'admin'})).status_code == 403
+        assert (await c.get(primary.url+'/internal/users',headers={**peer_headers(1), 'X-OCIProxy-Acting-User':'admin'})).status_code == 403
         for endpoint in ('manifest','tags'):
             r = await c.get(primary.url+'/replication/v2/pull/'+endpoint,headers=peer_headers(1),params={
                 'upstream':'private:secret','repo':'secret/app','reference':'v1'})
@@ -212,9 +212,9 @@ async def test_replication_credentials_never_authorize_private_or_admin(cluster)
 
 
 async def test_ui_authenticates_against_its_own_node(cluster):
-    from containerproxy_ui.app import create_app
+    from ociproxy_ui.app import create_app
     nodes, _ = cluster
-    csrf = {'X-Requested-With':'containerproxy'}
+    csrf = {'X-Requested-With':'ociproxy'}
     app = create_app(proxy_url=nodes[0].url, node_url=nodes[1].url, secret=nodes[1].config.secret)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='http://ui') as c:
         r = await c.post('/api/auth/login',headers=csrf,json={'username':'admin','password':'local-admin-password-0'})
@@ -295,7 +295,7 @@ async def test_read_only_peer_and_protocol_downgrade_are_rejected(cluster):
 
 
 def test_legacy_account_events_and_private_catalogs_are_rejected(tmp_path):
-    from containerproxy.store import Store
+    from ociproxy.store import Store
     store = Store(str(tmp_path))
     with pytest.raises(ValueError,match='account replication'):
         store.apply_account_event('user','copied',b'{}')
@@ -308,8 +308,8 @@ def test_legacy_account_events_and_private_catalogs_are_rejected(tmp_path):
 
 
 def test_legacy_databases_require_explicit_migration(tmp_path):
-    from containerproxy.api import App
-    from containerproxy.store import Store
+    from ociproxy.api import App
+    from ociproxy.store import Store
     cfg=Config(role='primary',storage_path=str(tmp_path/'legacy'),secret='local-secret')
     store=Store(cfg.storage_path)
     create_user(store,'old-user','reader','previous-password')
@@ -320,8 +320,8 @@ def test_legacy_databases_require_explicit_migration(tmp_path):
 
 @pytest.mark.parametrize('role', ['primary','replica'])
 def test_offline_migration_backs_up_and_separates_old_data(tmp_path, role):
-    from containerproxy.migrate import migrate
-    from containerproxy.store import Store
+    from ociproxy.migrate import migrate
+    from ociproxy.store import Store
     cfg=Config(role=role,storage_path=str(tmp_path/'legacy'),secret='new-local-secret',
                replication_id='site-a' if role=='replica' else '',
                replication_token='rep-token' if role=='replica' else '',
@@ -379,7 +379,7 @@ async def test_public_digest_assertion_cannot_export_privately_cached_bytes(clus
 
 
 def test_catalog_owner_is_checked_atomically_at_write(tmp_path):
-    from containerproxy.store import Store
+    from ociproxy.store import Store
     store = Store(str(tmp_path))
     spec = {'base_url':'https://public.example','sharing':'public','visibility':'public','owner':'site-a'}
     store.put_source('oci','public',spec,None,expected_owner='site-a')

@@ -2,8 +2,8 @@
 import httpx
 import pytest
 
-from containerproxy.config import UpstreamConfig
-from containerproxy.upstream import UpstreamClient, UpstreamError
+from ociproxy.config import UpstreamConfig
+from ociproxy.upstream import UpstreamClient, UpstreamError
 
 
 @pytest.mark.parametrize('link', [
@@ -57,7 +57,7 @@ async def test_https_registry_cannot_downgrade_token_exchange():
 
 
 async def test_oidc_discovery_cannot_downgrade_token_exchange():
-    from containerproxy_ui.oidc import OIDCClient, OIDCError, OIDCSettings
+    from ociproxy_ui.oidc import OIDCClient, OIDCError, OIDCSettings
 
     def handler(request):
         return httpx.Response(200, json={

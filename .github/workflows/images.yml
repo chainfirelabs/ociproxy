@@ -57,7 +57,7 @@ jobs:
             --pull \
             --provenance=false \
             --file "$DOCKERFILE" \
-            --tag "containerproxy-ci/${IMAGE}:${GITHUB_SHA}" \
+            --tag "ociproxy-ci/${IMAGE}:${GITHUB_SHA}" \
             --label "org.opencontainers.image.source=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
             --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
             "$BUILD_CONTEXT"

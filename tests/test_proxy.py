@@ -1,4 +1,4 @@
-"""Proxy behavior: upstream fetches honor HTTP(S)_PROXY / CONTAINERPROXY_UPSTREAM_PROXY;
+"""Proxy behavior: upstream fetches honor HTTP(S)_PROXY / OCIPROXY_UPSTREAM_PROXY;
 internal node-to-node replication traffic never does."""
 
 from __future__ import annotations

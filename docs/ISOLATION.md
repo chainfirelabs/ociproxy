@@ -44,10 +44,10 @@ when they reconnect; previously public data cannot be made secret retroactively.
 
 ## Trust and routing
 
-`CONTAINERPROXY_SECRET` / `[node].secret` is LOCAL to the node and its own UI.
+`OCIPROXY_SECRET` / `[node].secret` is LOCAL to the node and its own UI.
 Use independent values and bootstrap passwords on every node. It grants broad
 local administration authority and must never be given to a replication peer.
-Each UI's `CONTAINERPROXY_URL` points to its own node. The old `UI_NODE_URL`
+Each UI's `OCIPROXY_URL` points to its own node. The old `UI_NODE_URL`
 setting, if supplied, now selects that local backend for ALL UI operations.
 Sessions are bound to the backend URL as well as the local signing secret.
 
@@ -127,9 +127,9 @@ base_url = "https://registry.internal.example"
 # Local/private are the defaults. Set credentials through a secret or this UI.
 ```
 
-Equivalent environment variables are `CONTAINERPROXY_REPLICATION_ID`,
-`CONTAINERPROXY_REPLICATION_TOKEN`, and (on the primary)
-`CONTAINERPROXY_REPLICATION_PEERS`, a JSON object such as
+Equivalent environment variables are `OCIPROXY_REPLICATION_ID`,
+`OCIPROXY_REPLICATION_TOKEN`, and (on the primary)
+`OCIPROXY_REPLICATION_PEERS`, a JSON object such as
 `{"site-a":{"token":"...","publish":false}}`.
 
 A replica's local administrator can add private sources locally without any
@@ -159,7 +159,7 @@ serve if it contains legacy data. No live data is migrated automatically.
    configuration and a new backup directory OUTSIDE that storage tree:
 
    ```sh
-   python -m containerproxy.migrate --config /path/to/node.toml \
+   python -m ociproxy.migrate --config /path/to/node.toml \
      --backup /secure/backups/node-before-isolation --stopped
    ```
 

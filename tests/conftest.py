@@ -17,8 +17,8 @@ if _UI_SRC not in sys.path:
 import pytest
 import uvicorn
 
-from containerproxy.api import App
-from containerproxy.config import Config, HelmRepoConfig, UpstreamConfig
+from ociproxy.api import App
+from ociproxy.config import Config, HelmRepoConfig, UpstreamConfig
 
 from .fake_upstream import FakeUpstream
 
@@ -35,7 +35,7 @@ def free_port() -> int:
 
 
 class Node:
-    """A containerproxy node running in a background thread."""
+    """A ociproxy node running in a background thread."""
 
     def __init__(self, config: Config):
         self.config = config

@@ -37,7 +37,7 @@ Gitleaks scanned reachable commit history with redacted output. Its single
 finding is the deliberately invalid token-format fixture in tests/test_auth.py,
 not a working credential. A separate working-directory scan also detected the
 ignored local .env secret, which is excluded from the public export. Manual checks found placeholders and test credentials,
-not confirmed live credentials. Local .env and containerproxy.toml have never
+not confirmed live credentials. Local .env and ociproxy.toml have never
 been tracked. No scanner can prove the absence of every possible secret.
 
 The public export includes tracked project files and the reviewed additions,

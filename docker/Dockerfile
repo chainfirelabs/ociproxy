@@ -4,7 +4,7 @@
 # To update: skopeo inspect --raw docker://<image:tag> | sha256sum
 # Keep the builder's Python minor version equal to the runtime's (3.13).
 
-# Build stage: install containerproxy + deps into an isolated directory.
+# Build stage: install ociproxy + deps into an isolated directory.
 # Runtime deps are pure Python or manylinux wheels (pyyaml, cryptography)
 # built for the same Python minor and glibc, so the tree is portable into
 # the distroless python3 image.
@@ -19,7 +19,7 @@ COPY docs/THIRD_PARTY_NOTICES.md ./
 COPY third_party/ ./third_party/
 COPY src ./src
 RUN pip install --no-cache-dir --no-deps --target /staged . \
- && mkdir -p /staged-root/var/lib/containerproxy \
+ && mkdir -p /staged-root/var/lib/ociproxy \
  && chown -R 65532:65532 /staged-root
 
 # Runtime: Google distroless python3 (Debian 13, Python 3.13), nonroot user (uid 65532).
@@ -32,18 +32,18 @@ FROM gcr.io/distroless/python3-debian13:nonroot@sha256:8ee214843129f43e2ebf5e0ca
 ENV PYTHONPATH=/app/site-packages \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    CONTAINERPROXY_LISTEN=0.0.0.0 \
-    CONTAINERPROXY_PORT=5000 \
-    CONTAINERPROXY_STORAGE_PATH=/var/lib/containerproxy \
-    CONTAINERPROXY_CONFIG=/app/containerproxy.toml
+    OCIPROXY_LISTEN=0.0.0.0 \
+    OCIPROXY_PORT=5000 \
+    OCIPROXY_STORAGE_PATH=/var/lib/ociproxy \
+    OCIPROXY_CONFIG=/app/ociproxy.toml
 
 COPY --from=builder /staged /app/site-packages
 # Preserve project, dependency and supplemental third-party license notices.
-COPY --from=builder /build/LICENSE /build/THIRD_PARTY_NOTICES.md /usr/share/licenses/containerproxy/
-COPY --from=builder /build/third_party/ /usr/share/licenses/containerproxy/third_party/
-# /var/lib/containerproxy pre-owned by nonroot so named volumes initialize writable.
+COPY --from=builder /build/LICENSE /build/THIRD_PARTY_NOTICES.md /usr/share/licenses/ociproxy/
+COPY --from=builder /build/third_party/ /usr/share/licenses/ociproxy/third_party/
+# /var/lib/ociproxy pre-owned by nonroot so named volumes initialize writable.
 COPY --from=builder --chown=65532:65532 /staged-root/ /
 
 EXPOSE 5000
 
-ENTRYPOINT ["/usr/bin/python3", "-m", "containerproxy.cli", "serve"]
+ENTRYPOINT ["/usr/bin/python3", "-m", "ociproxy.cli", "serve"]

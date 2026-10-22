@@ -2,8 +2,8 @@
 # after completing the binary/source release requirements in LICENSE_REVIEW.md.
 # Image destinations:
 #
-#   $CI_REGISTRY_IMAGE      containerproxy (proxy node, docker/Dockerfile)
-#   $CI_REGISTRY_IMAGE/ui   containerproxy-ui (web admin, docker/Dockerfile.ui)
+#   $CI_REGISTRY_IMAGE      ociproxy (proxy node, docker/Dockerfile)
+#   $CI_REGISTRY_IMAGE/ui   ociproxy-ui (web admin, docker/Dockerfile.ui)
 #
 # Tags pushed:
 #   default branch  -> :<short sha>, :latest
@@ -94,10 +94,10 @@ lint:chart:
   stage: test
   image: alpine/helm:3.16.4
   script:
-    - helm lint charts/containerproxy
-    - helm template ci charts/containerproxy > /dev/null
+    - helm lint charts/ociproxy
+    - helm template ci charts/ociproxy > /dev/null
     # Replicas-only install against a remote primary.
-    - helm template ci charts/containerproxy --set primary.enabled=false --set replica.enabled=true --set ui.enabled=false
+    - helm template ci charts/ociproxy --set primary.enabled=false --set replica.enabled=true --set ui.enabled=false
         --set replica.primaryUrl=https://primary.example.com > /dev/null
 
 check:licenses:

@@ -1,6 +1,6 @@
-# ContainerProxy
+# OCIProxy
 
-[GitHub repository](https://github.com/chainfirelabs/containerproxy)
+[GitHub repository](https://github.com/chainfirelabs/ociproxy)
 
 Cache Docker/OCI images and Helm charts with a primary and optional replicas.
 
@@ -15,7 +15,7 @@ Starts one primary, two replicas and a separate UI for each node.
 
 ```sh
 cp .env.example .env
-cp containerproxy.toml.example containerproxy.toml
+cp ociproxy.toml.example ociproxy.toml
 ```
 
 Edit `.env`: replace **every** example secret, password and replication token.
@@ -45,11 +45,11 @@ Create `images.yaml` using the GitHub Container Registry paths below. Replace
 
 ```yaml
 image:
-  repository: ghcr.io/chainfirelabs/containerproxy
+  repository: ghcr.io/chainfirelabs/ociproxy
   tag: "YOUR_TAG"
 ui:
   image:
-    repository: ghcr.io/chainfirelabs/containerproxy/ui
+    repository: ghcr.io/chainfirelabs/ociproxy/ui
     tag: "YOUR_TAG"
 ```
 
@@ -74,7 +74,7 @@ primary:
 replica:
   enabled: true
   replicaCount: 1
-  primaryUrl: http://primary-containerproxy-primary:5000
+  primaryUrl: http://primary-ociproxy-primary:5000
 replication:
   id: site-a
   token: "REPLACE_WITH_REPLICATION_TOKEN"
@@ -86,9 +86,9 @@ config:
 Install the primary, then the replica:
 
 ```sh
-helm upgrade --install primary charts/containerproxy -n registry --create-namespace \
+helm upgrade --install primary charts/ociproxy -n registry --create-namespace \
   -f images.yaml -f primary.yaml
-helm upgrade --install replica charts/containerproxy -n registry \
+helm upgrade --install replica charts/ociproxy -n registry \
   -f images.yaml -f replica.yaml
 ```
 
@@ -96,13 +96,13 @@ Each release generates its own local admin credentials. The username defaults to
 **`ci`**. Get the replica's password and open its UI:
 
 ```sh
-kubectl -n registry get secret replica-containerproxy-auth \
+kubectl -n registry get secret replica-ociproxy-auth \
   -o jsonpath='{.data.push-password}' | base64 --decode; printf '\n'
-kubectl -n registry port-forward svc/replica-containerproxy-ui 8081:8080
+kubectl -n registry port-forward svc/replica-ociproxy-ui 8081:8080
 ```
 
-Visit http://localhost:8081. For the primary, use `primary-containerproxy-auth`
-and `primary-containerproxy-ui` instead. For remote clusters, set
+Visit http://localhost:8081. For the primary, use `primary-ociproxy-auth`
+and `primary-ociproxy-ui` instead. For remote clusters, set
 `replica.primaryUrl` to the primary's HTTPS address and route `/replication/` to
 its registry backend. Leave `ui.primaryUrl` and `ui.nodeUrl` unset.
 
@@ -117,7 +117,7 @@ For Compose, or after forwarding the Helm replica registry to port 5001:
 
 ```sh
 # Helm only: run in another terminal.
-# kubectl -n registry port-forward svc/replica-containerproxy-replica 5001:5000
+# kubectl -n registry port-forward svc/replica-ociproxy-replica 5001:5000
 docker pull localhost:5001/dockerhub/library/alpine:latest
 ```
 
@@ -125,6 +125,8 @@ To share a Docker or Helm source, set **both** `sharing: public` and
 `visibility: public` in Helm values (or `sharing = "public"` and
 `visibility = "public"` in TOML). Shared sources must allow anonymous upstream
 access. New sources default to private/local.
+
+For an existing installation, also read the [OCIProxy naming upgrade notes](docs/RENAME.md).
 
 ## More information
 

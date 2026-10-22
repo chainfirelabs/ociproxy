@@ -13,7 +13,7 @@ import httpx
 
 from .conftest import SECRET
 
-H = {"X-ContainerProxy-Secret": SECRET}
+H = {"X-OCIProxy-Secret": SECRET}
 
 
 async def test_overview_shape(primary):
@@ -35,7 +35,7 @@ async def test_internal_endpoints_require_secret(primary):
         for path in ("/internal/overview", "/internal/images", "/internal/upstreams"):
             assert (await c.get(f"{primary.url}{path}")).status_code == 403
             assert (
-                await c.get(f"{primary.url}{path}", headers={"X-ContainerProxy-Secret": "nope"})
+                await c.get(f"{primary.url}{path}", headers={"X-OCIProxy-Secret": "nope"})
             ).status_code == 403
 
 
@@ -79,7 +79,7 @@ async def test_images_pagination(primary, fake_upstream):
 
 async def test_upstreams_get_is_sanitized(primary):
     # Seed a credentialed upstream directly in config; the GET must not leak it.
-    from containerproxy.config import UpstreamConfig
+    from ociproxy.config import UpstreamConfig
 
     registry = primary.app_obj.sources
     registry.static_upstreams.append(
@@ -157,7 +157,7 @@ async def test_pull_attribution_ignores_unknown_node(primary):
     async with httpx.AsyncClient() as c:
         r = await c.get(
             f"{primary.url}/internal/pull/blob/sha256:" + "a" * 64,
-            headers={**H, "X-ContainerProxy-Node": "ghost-node"},
+            headers={**H, "X-OCIProxy-Node": "ghost-node"},
         )
         assert r.status_code == 404  # blob absent; attribution was a no-op
         ov = (await c.get(f"{primary.url}/internal/overview", headers=H)).json()

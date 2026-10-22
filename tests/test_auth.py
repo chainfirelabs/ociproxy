@@ -11,19 +11,19 @@ import time
 import httpx
 import pytest
 
-from containerproxy.auth import (
+from ociproxy.auth import (
     AccessPolicy, create_token, create_user, hash_password, parse_token, verify_password,
 )
-from containerproxy.config import AccessRule, HelmRepoConfig, UpstreamConfig
+from ociproxy.config import AccessRule, HelmRepoConfig, UpstreamConfig
 
 from .conftest import SECRET, Node, free_port, make_config, wait_until
 from .fake_upstream import MANIFEST_V2
 
-INTERNAL = {"X-ContainerProxy-Secret": SECRET}
+INTERNAL = {"X-OCIProxy-Secret": SECRET}
 
 
 def acting(user: str) -> dict:
-    return {**INTERNAL, "X-ContainerProxy-Acting-User": user}
+    return {**INTERNAL, "X-OCIProxy-Acting-User": user}
 
 
 async def _push(c: httpx.AsyncClient, base: str, repo: str, auth) -> int:
@@ -215,7 +215,7 @@ async def test_catalog_and_index_do_not_leak(private_cluster):
         assert (await c.get(f"{primary.url}/v2/_catalog")).status_code == 401
         assert (await c.get(f"{primary.url}/v2/_catalog", auth=("boot", "boot-password"))).status_code == 200
         r = await c.get(f"{primary.url}/")
-        assert r.text == "containerproxy primary\n"
+        assert r.text == "ociproxy primary\n"
 
 
 async def test_catalog_open_when_nothing_is_private(primary):
@@ -368,7 +368,7 @@ async def test_idle_uploads_are_dropped(tmp_path):
             # the background sweeper (every timeout/4) drops them
             await wait_until(lambda: not node.app_obj.uploads, timeout=5, msg="sessions swept")
             assert not list(tmp_dir.iterdir())
-            assert node.app_obj.metrics.value("containerproxy_uploads_expired_total") == 5
+            assert node.app_obj.metrics.value("ociproxy_uploads_expired_total") == 5
             r = await c.patch(location, content=b"late", auth=("ci", "cipass"))
             assert r.status_code == 404
     finally:

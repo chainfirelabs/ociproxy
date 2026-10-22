@@ -37,7 +37,7 @@ def check_notices(root: Path, notices: list) -> None:
 def main() -> None:
     check_project(ROOT)
     check_project(ROOT / 'webapp')
-    if (ROOT / 'charts/containerproxy/LICENSE').read_bytes() != (ROOT / 'LICENSE').read_bytes():
+    if (ROOT / 'charts/ociproxy/LICENSE').read_bytes() != (ROOT / 'LICENSE').read_bytes():
         raise ValueError('Chart MIT license differs')
     for record in json.loads((ROOT / 'third_party/rust-inventory.json').read_text()):
         if not record['license_files']:

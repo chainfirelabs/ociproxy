@@ -1,0 +1,160 @@
+{{- if and .Values.primary.enabled .Values.replica.enabled }}
+{{- fail "Deploy one independent node per release: enable primary OR replica, not both" }}
+{{- end }}
+{{- if and .Values.replica.enabled (ne (int .Values.replica.replicaCount) 1) }}
+{{- fail "Each replica requires its own release, local Secret, UI and accounts; replicaCount must be 1" }}
+{{- end }}
+{{- /* The primary and replica StatefulSets: same image, role by environment,
+like the compose services. */ -}}
+{{- range $component := list "primary" "replica" }}
+{{- $c := index $.Values $component }}
+{{- if $c.enabled }}
+{{- $isPrimary := eq $component "primary" }}
+{{- $fullname := include "ociproxy.fullname" $ }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $fullname }}-{{ $component }}
+  labels:
+    {{- include "ociproxy.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $component }}
+spec:
+  {{- if $isPrimary }}
+  # The primary is a single writer (SQLite index + changelog): never more than one.
+  replicas: 1
+  {{- else }}
+  replicas: {{ $c.replicaCount }}
+  podManagementPolicy: Parallel
+  {{- end }}
+  serviceName: {{ include "ociproxy.headless" $ }}
+  selector:
+    matchLabels:
+      {{- include "ociproxy.componentSelector" (dict "root" $ "component" $component) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ociproxy.componentSelector" (dict "root" $ "component" $component) | nindent 8 }}
+        ociproxy.io/node: "true"
+        {{- with $c.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        {{- include "ociproxy.podChecksums" $ | nindent 8 }}
+        {{- with $c.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "ociproxy.serviceAccountName" $ }}
+      automountServiceAccountToken: {{ $.Values.serviceAccount.automount }}
+      {{- with $.Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml $.Values.podSecurityContext | nindent 8 }}
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: ociproxy
+          image: {{ include "ociproxy.image" $ }}
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml $.Values.securityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 5000
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: OCIPROXY_ROLE
+              value: {{ $component }}
+            {{- if $isPrimary }}
+            - name: OCIPROXY_ADVERTISED_URL
+              value: {{ include "ociproxy.primaryServiceUrl" $ | quote }}
+            {{- if $c.upstreamProxySecretRef.name }}
+            - name: OCIPROXY_UPSTREAM_PROXY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $c.upstreamProxySecretRef.name }}
+                  key: {{ $c.upstreamProxySecretRef.key | default "url" }}
+            {{- else if $c.upstreamProxy }}
+            - name: OCIPROXY_UPSTREAM_PROXY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "ociproxy.secretName" $ }}
+                  key: upstream-proxy
+            {{- end }}
+            {{- else }}
+            - name: OCIPROXY_PRIMARY_URL
+              value: {{ include "ociproxy.replicaPrimaryUrl" $ | quote }}
+            # Where the primary pushes new content to this pod.
+            - name: OCIPROXY_ADVERTISED_URL
+              value: {{ $c.advertisedUrl | default (printf "http://$(POD_NAME).%s.%s.svc.%s:5000" (include "ociproxy.headless" $) $.Release.Namespace $.Values.clusterDomain) | quote }}
+            {{- end }}
+            {{- include "ociproxy.nodeEnv" $ | nindent 12 }}
+            {{- with $c.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- include "ociproxy.probes" $ | nindent 10 }}
+          volumeMounts:
+            {{- include "ociproxy.nodeVolumeMounts" $ | nindent 12 }}
+          {{- with $c.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: config
+          secret:
+            secretName: {{ include "ociproxy.configSecretName" $ }}
+        - name: tmp
+          emptyDir: {}
+        {{- if not $c.persistence.enabled }}
+        - name: data
+          emptyDir: {}
+        {{- else if and $isPrimary $c.persistence.existingClaim }}
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ $c.persistence.existingClaim }}
+        {{- end }}
+      {{- with $c.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $c.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if $c.affinity }}
+      affinity:
+        {{- toYaml $c.affinity | nindent 8 }}
+      {{- else if not $isPrimary }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    {{- include "ociproxy.componentSelector" (dict "root" $ "component" $component) | nindent 20 }}
+      {{- end }}
+  {{- if and $c.persistence.enabled (not (and $isPrimary $c.persistence.existingClaim)) }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          {{- include "ociproxy.componentSelector" (dict "root" $ "component" $component) | nindent 10 }}
+      spec:
+        accessModes:
+          {{- toYaml $c.persistence.accessModes | nindent 10 }}
+        {{- with $c.persistence.storageClass }}
+        storageClassName: {{ . | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ $c.persistence.size }}
+  {{- end }}
+{{- end }}
+{{- end }}

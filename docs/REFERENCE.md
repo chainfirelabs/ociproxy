@@ -10,11 +10,11 @@ Python 3.11 or later is required. Each node has its own storage directory:
 python -m venv .venv
 . .venv/bin/activate
 pip install -e '.[test]'
-containerproxy serve --config containerproxy.toml
+ociproxy serve --config ociproxy.toml
 ```
 
-Environment variables prefixed `CONTAINERPROXY_` override the TOML file.
-See [containerproxy.toml.example](../containerproxy.toml.example) for a complete
+Environment variables prefixed `OCIPROXY_` override the TOML file.
+See [ociproxy.toml.example](../ociproxy.toml.example) for a complete
 primary example and [ISOLATION.md](ISOLATION.md#configuration) for peer setup.
 
 | Variable | Purpose |
@@ -38,7 +38,7 @@ primary example and [ISOLATION.md](ISOLATION.md#configuration) for peer setup.
 | `UPLOAD_IDLE_TIMEOUT`, `UPLOAD_MAX_SESSIONS` | Bound unfinished pushes |
 | `LOG_FORMAT` | `text` or `json` |
 
-The table omits the common `CONTAINERPROXY_` prefix. `HTTP_PROXY`, `HTTPS_PROXY`
+The table omits the common `OCIPROXY_` prefix. `HTTP_PROXY`, `HTTPS_PROXY`
 and `NO_PROXY` apply to upstream traffic; internal replication ignores environment
 proxies. Replication and local administration credentials must differ. Each peer
 token on the primary must also be unique.
@@ -87,17 +87,17 @@ they may expire or be revoked on that node. OIDC users can create CLI tokens but
 have no local password. Bootstrap accounts cannot create personal tokens.
 
 ```sh
-containerproxy user add alice --role reader --config /path/to/this-node.toml
-containerproxy user list --config /path/to/this-node.toml
-containerproxy token create alice --name laptop --config /path/to/this-node.toml
+ociproxy user add alice --role reader --config /path/to/this-node.toml
+ociproxy user list --config /path/to/this-node.toml
+ociproxy token create alice --name laptop --config /path/to/this-node.toml
 ```
 
 CLI commands act on the selected node's database and never replicate accounts.
 Local API changes invalidate local credential caches immediately; direct CLI
 changes are picked up by the running process's short credential-cache expiry.
 
-The UI is a separate package/image. Set `CONTAINERPROXY_URL` to the LOCAL node,
-`CONTAINERPROXY_SECRET` to that node's local secret, and `UI_PUBLIC_URL` to its
+The UI is a separate package/image. Set `OCIPROXY_URL` to the LOCAL node,
+`OCIPROXY_SECRET` to that node's local secret, and `UI_PUBLIC_URL` to its
 browser-facing URL. HTTPS public URLs enable Secure cookies. Sessions are signed,
 HttpOnly, SameSite=Lax and bound to the backend URL. State-changing browser API
 calls require the CSRF header. Users and source management require local admin.
@@ -164,8 +164,8 @@ grace period. Local pushed manifests are not aged out as mirrored content.
 ```sh
 pip install -e '.[test]' -e ./webapp
 pytest -q
-helm lint charts/containerproxy
-helm template cp charts/containerproxy >/dev/null
+helm lint charts/ociproxy
+helm template cp charts/ociproxy >/dev/null
 docker compose --env-file .env.example config --quiet
 ```
 

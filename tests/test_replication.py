@@ -79,15 +79,15 @@ async def test_internal_requires_secret(primary):
     async with httpx.AsyncClient() as c:
         path = f"{primary.url}/replication/v2/changelog?since=0&wait=0"
         assert (await c.get(path)).status_code == 403
-        assert (await c.get(path, headers={"X-ContainerProxy-Secret":"test-secret"})).status_code == 403
-        assert (await c.get(path, headers={"Authorization":"Bearer peer-test-token", "X-ContainerProxy-Peer":"test"})).status_code == 200
+        assert (await c.get(path, headers={"X-OCIProxy-Secret":"test-secret"})).status_code == 403
+        assert (await c.get(path, headers={"Authorization":"Bearer peer-test-token", "X-OCIProxy-Peer":"test"})).status_code == 200
 
 
 async def test_replica_does_not_serve_internal_pull(replica):
     async with httpx.AsyncClient() as c:
         r = await c.get(
             f"{replica.url}/internal/pull/manifest?upstream=fake&repo=myimg&reference=v1",
-            headers={"X-ContainerProxy-Secret": "test-secret"},
+            headers={"X-OCIProxy-Secret": "test-secret"},
         )
         assert r.status_code == 404
 
@@ -96,7 +96,7 @@ async def test_primary_rejects_ingest(primary):
     async with httpx.AsyncClient() as c:
         r = await c.post(
             f"{primary.url}/internal/ingest/blob/sha256:{'a' * 64}",
-            headers={"X-ContainerProxy-Secret": "test-secret"},
+            headers={"X-OCIProxy-Secret": "test-secret"},
         )
         assert r.status_code == 404
 
@@ -140,7 +140,7 @@ async def test_replica_ingest_digest_mismatch_is_400_and_cleans_up(replica):
         r = await c.post(
             f"{replica.url}/internal/ingest/blob/sha256:{'a' * 64}",
             content=b"not the right bytes",
-            headers={"X-ContainerProxy-Secret": "test-secret"},
+            headers={"X-OCIProxy-Secret": "test-secret"},
         )
     assert r.status_code == 404, r.text
     assert list(tmp_dir.iterdir()) == []

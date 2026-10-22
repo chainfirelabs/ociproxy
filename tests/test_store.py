@@ -7,7 +7,7 @@ import time
 
 import pytest
 
-from containerproxy.store import LOCAL, Store, parse_digest
+from ociproxy.store import LOCAL, Store, parse_digest
 
 
 def put_blob(store: Store, data: bytes, *, origin=None) -> str:

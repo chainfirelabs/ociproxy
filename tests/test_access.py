@@ -6,7 +6,7 @@ import httpx
 from dataclasses import replace
 import pytest
 
-from containerproxy.config import UpstreamConfig, load_config
+from ociproxy.config import UpstreamConfig, load_config
 from .conftest import Node, make_config
 
 
@@ -75,23 +75,23 @@ async def test_private_replica_gates_its_own_pulls(tmp_path, fake_upstream, upst
 
 
 def test_default_visibility_and_pull_auth_alias(monkeypatch, tmp_path):
-    monkeypatch.setenv("CONTAINERPROXY_ROLE", "primary")
-    monkeypatch.setenv("CONTAINERPROXY_STORAGE_PATH", str(tmp_path / "s"))
+    monkeypatch.setenv("OCIPROXY_ROLE", "primary")
+    monkeypatch.setenv("OCIPROXY_STORAGE_PATH", str(tmp_path / "s"))
     assert load_config(None).default_visibility == "public"  # default: public
 
-    monkeypatch.setenv("CONTAINERPROXY_PULL_AUTH", "bogus")
+    monkeypatch.setenv("OCIPROXY_PULL_AUTH", "bogus")
     with pytest.raises(ValueError, match="pull_auth"):
         load_config(None)
 
     # the older spelling still works; users may live in the database, so
     # a private default no longer needs push credentials
-    monkeypatch.setenv("CONTAINERPROXY_PULL_AUTH", "basic")
+    monkeypatch.setenv("OCIPROXY_PULL_AUTH", "basic")
     assert load_config(None).default_visibility == "private"
 
     # the new setting wins over the old one
-    monkeypatch.setenv("CONTAINERPROXY_DEFAULT_VISIBILITY", "public")
+    monkeypatch.setenv("OCIPROXY_DEFAULT_VISIBILITY", "public")
     assert load_config(None).default_visibility == "public"
-    monkeypatch.setenv("CONTAINERPROXY_DEFAULT_VISIBILITY", "secret")
+    monkeypatch.setenv("OCIPROXY_DEFAULT_VISIBILITY", "secret")
     with pytest.raises(ValueError, match="visibility"):
         load_config(None)
 
@@ -161,7 +161,7 @@ async def test_default_upstream_fallback_normalizes(tmp_path, fake_upstream):
 async def test_private_blob_cannot_be_read_via_public_path(tmp_path):
     import hashlib
     import json
-    from containerproxy.config import AccessRule
+    from ociproxy.config import AccessRule
     from .test_push import push_blob, MANIFEST_V2
 
     node = Node(make_config(tmp_path, 'primary', name='blob-isolation',

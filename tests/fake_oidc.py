@@ -22,7 +22,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, RedirectResponse, Response
 from starlette.routing import Route
 
-CLIENT_ID = "containerproxy"
+CLIENT_ID = "ociproxy"
 CLIENT_SECRET = "oidc-client-secret"
 
 
