@@ -1,5 +1,7 @@
 # OCIProxy
 
+![OCIProxy](ociproxy.png)
+
 [GitHub repository](https://github.com/chainfirelabs/ociproxy)
 
 Cache Docker/OCI images and Helm charts with a primary and optional replicas.
