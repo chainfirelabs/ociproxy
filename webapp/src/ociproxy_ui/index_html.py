@@ -44,7 +44,7 @@ INDEX_HTML = """<!DOCTYPE html>
   button:disabled { opacity: .5; cursor: default; }
   #sync-now { min-width: 100px; flex-shrink: 0; }
   #sync-toast {
-    position: fixed; right: 20px; bottom: 20px; z-index: 20;
+    position: fixed; right: 20px; bottom: 56px; z-index: 20;
     max-width: min(420px, calc(100vw - 40px)); padding: 14px 16px;
     background: var(--card); border: 1px solid var(--green); border-radius: 10px;
     box-shadow: 0 8px 30px #0008; display: flex; align-items: start; gap: 16px;
@@ -53,6 +53,12 @@ INDEX_HTML = """<!DOCTYPE html>
   #sync-toast[hidden] { display: none; }
   #sync-toast.error { border-color: var(--red); }
   #sync-toast button { flex-shrink: 0; padding: 0 6px; }
+  #company-link {
+    position: fixed; right: 20px; bottom: 14px; z-index: 10;
+    padding: 3px 8px; border-radius: 6px; background: var(--bg);
+    color: var(--dim); font-size: 12px; text-decoration: none;
+  }
+  #company-link:hover, #company-link:focus-visible { color: var(--accent); text-decoration: none; }
   label.auto { color: var(--dim); font-size: 13px; user-select: none; }
   #updated { color: var(--dim); font-size: 12px; }
   main { max-width: 1180px; margin: 0 auto; padding: 20px 22px 60px; }
@@ -111,6 +117,14 @@ INDEX_HTML = """<!DOCTYPE html>
     border-radius: 6px; padding: 5px 9px; font-size: 13px;
   }
   input:focus, select:focus { outline: none; border-color: var(--accent); }
+  #reset-password-dialog {
+    background: var(--card); color: var(--text); border: 1px solid var(--line);
+    border-radius: 10px; width: min(420px, calc(100vw - 32px)); padding: 22px;
+  }
+  #reset-password-dialog::backdrop { background: #0009; }
+  #reset-password-dialog h2 { margin-top: 0; font-size: 17px; }
+  #reset-password-dialog input { display: block; width: 100%; margin: 6px 0 14px; }
+  #reset-password-error { color: #ffb4b0; }
   #login { max-width: 360px; margin: 12vh auto 0; }
   #login section { padding: 22px; }
   #login h2 { border: 0; padding: 0 0 14px; font-size: 17px; }
@@ -131,6 +145,17 @@ INDEX_HTML = """<!DOCTYPE html>
   .pill { white-space: nowrap; }
   input:disabled, select:disabled { opacity: .6; }
   #upstreams { overflow-x: auto; }
+  #cleanup-entries { overflow-x: hidden; overflow-y: auto; max-height: 440px; }
+  #cleanup-entries table { table-layout: fixed; }
+  #cleanup-entries th, #cleanup-entries td { overflow-wrap: anywhere; }
+  #cleanup-entries th:first-child { width: 48px; }
+  #cleanup-entries th:nth-child(2) { width: 50%; }
+  @media (max-width: 600px) {
+    #cleanup-entries th, #cleanup-entries td { padding: 8px 4px; }
+    #cleanup-entries th:first-child { width: 28px; }
+    #cleanup-entries th:nth-child(2) { width: 35%; }
+    #cleanup-entries button { padding: 5px 4px; }
+  }
   #upstreams td:first-child { white-space: nowrap; }
   tr.locked td { color: var(--dim); }
   tr.locked td.mono { opacity: .7; }
@@ -252,7 +277,7 @@ INDEX_HTML = """<!DOCTYPE html>
         <label><input id="cleanup-pushed" type="checkbox"> Include local pushes</label>
         <button type="submit">Preview selected cleanup</button>
       </form>
-      <div id="cleanup-entries" style="overflow:auto;max-height:440px"></div>
+      <div id="cleanup-entries"></div>
       <div id="cleanup-preview" hidden style="padding:16px">
         <pre id="cleanup-preview-text" style="white-space:pre-wrap"></pre>
         <button id="cleanup-confirm" class="danger" type="button">Confirm cleanup</button>
@@ -313,6 +338,19 @@ INDEX_HTML = """<!DOCTYPE html>
   </div>
 </main>
 </div>
+<dialog id="reset-password-dialog" aria-labelledby="reset-password-title">
+  <form id="reset-password-form">
+    <h2 id="reset-password-title">Reset password</h2>
+    <p>New password for <b id="reset-password-user"></b>.</p>
+    <label for="reset-password-new">New password (minimum 10 characters)</label>
+    <input id="reset-password-new" type="password" autocomplete="new-password" minlength="10" required autofocus>
+    <label for="reset-password-confirm">Confirm new password</label>
+    <input id="reset-password-confirm" type="password" autocomplete="new-password" minlength="10" required>
+    <p id="reset-password-error" role="alert"></p>
+    <button type="submit" class="primary-btn" id="reset-password-submit">Reset password</button>
+    <button type="button" id="reset-password-cancel">Cancel</button>
+  </form>
+</dialog>
 <script>
 const PAGE = 25;
 let page = 0;
@@ -888,6 +926,42 @@ document.getElementById('token-form').addEventListener('submit', async e => {
 
 // -- users (admin) ------------------------------------------------------------
 
+const resetDialog = document.getElementById('reset-password-dialog');
+const resetForm = document.getElementById('reset-password-form');
+const resetPassword = document.getElementById('reset-password-new');
+const resetConfirmation = document.getElementById('reset-password-confirm');
+const resetError = document.getElementById('reset-password-error');
+const resetSubmit = document.getElementById('reset-password-submit');
+let resetUser = null;
+resetDialog.addEventListener('close', () => {
+  resetForm.reset();
+  resetUser = null;
+  resetError.textContent = '';
+  resetConfirmation.setCustomValidity('');
+});
+document.getElementById('reset-password-cancel').onclick = () => resetDialog.close();
+for (const input of [resetPassword, resetConfirmation]) {
+  input.addEventListener('input', () => resetConfirmation.setCustomValidity(''));
+}
+resetForm.addEventListener('submit', async e => {
+  e.preventDefault();
+  if (resetSubmit.disabled || !resetUser) return;
+  resetConfirmation.setCustomValidity(resetPassword.value === resetConfirmation.value
+    ? '' : 'Passwords do not match.');
+  if (!resetForm.reportValidity()) return;
+  resetError.textContent = '';
+  resetSubmit.disabled = true;
+  try {
+    await api('/api/users/' + encodeURIComponent(resetUser), {
+      method: 'PATCH', json: {password: resetPassword.value}});
+    resetDialog.close();
+    await loadUsers();
+  } catch (x) {
+    if (resetDialog.open) resetError.textContent = x.message;
+    else showErr(x.message);
+  } finally { resetSubmit.disabled = false; }
+});
+
 async function loadUsers() {
   const d = await api('/api/users');
   const el = document.getElementById('users');
@@ -923,9 +997,10 @@ usersEl.addEventListener('click', async e => {
     if (d.toggle) {
       await api('/api/users/' + encodeURIComponent(d.toggle), {method: 'PATCH', json: {disabled: !d.disabled}});
     } else if (d.reset) {
-      const pw = prompt('New password for ' + d.reset + ' (min 10 characters):');
-      if (!pw) return;
-      await api('/api/users/' + encodeURIComponent(d.reset), {method: 'PATCH', json: {password: pw}});
+      resetUser = d.reset;
+      document.getElementById('reset-password-user').textContent = resetUser;
+      resetDialog.showModal();
+      return;
     } else if (d.delete) {
       if (!confirm('Delete ' + d.delete + ' and all of their tokens?')) return;
       await api('/api/users/' + encodeURIComponent(d.delete), {method: 'DELETE'});
@@ -1009,6 +1084,7 @@ document.getElementById('auto').addEventListener('change', setAuto);
 
 boot().then(() => { if (!me) showLogin(); });
 </script>
+<a id="company-link" href="https://chainfirelabs.com" target="_blank" rel="noopener noreferrer">@ChainFire Labs</a>
 </body>
 </html>
 """
