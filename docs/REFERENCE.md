@@ -168,7 +168,7 @@ pip install -e '.[test]' -e ./webapp
 pytest -q
 helm lint charts/ociproxy
 helm template cp charts/ociproxy >/dev/null
-docker compose --env-file .env.example config --quiet
+docker compose --env-file docker/.env.example -f docker/docker-compose.development.yml config --quiet
 ```
 
 Tests include multi-node isolation, independent users/tokens/UI sessions,

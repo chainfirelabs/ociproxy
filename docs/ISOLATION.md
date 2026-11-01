@@ -191,7 +191,7 @@ or `.env` files as part of implementing this feature.
 
 Compose now supplies independent primary/replica secrets, passwords and peer
 credentials, provides a separate UI per node (ports 8080/8081/8082), and gives
-replicas upstream egress. Copy `.env.example`, generate every secret separately,
+replicas upstream egress. Copy `docker/.env.example`, generate every secret separately,
 and use `REPLICA1_CONFIG` / `REPLICA2_CONFIG` for optional private config files.
 Do not blindly copy the primary's private configuration onto replicas.
 

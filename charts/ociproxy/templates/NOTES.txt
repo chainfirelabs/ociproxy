@@ -1,18 +1,35 @@
+{{- $role := ternary "primary" "replica" .Values.primary.enabled }}
+{{- $regIng := index .Values.ingress $role }}
+{{- $scheme := ternary "https" "http" (gt (len $regIng.tls) 0) }}
 OCIProxy {{ .Chart.AppVersion }} installed as "{{ .Release.Name }}".
 
 This release is ONE independent {{ if .Values.primary.enabled }}primary{{ else }}replica{{ end }} node.
 Accounts, private sources, credentials and its UI are local to this node.
 Only explicitly public Docker/Helm sources and content may be shared.
 
-Local node:
-  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "ociproxy.fullname" . }}-{{ if .Values.primary.enabled }}primary{{ else }}replica{{ end }} 5001:5000
+Registry:
+{{- if $regIng.enabled }}
+  {{ $scheme }}://{{ $regIng.host }}
+{{- else }}
+  Not exposed. Set ingress.{{ $role }}.enabled=true with a host and TLS,
+  or expose Service {{ include "ociproxy.fullname" . }}-{{ $role }} yourself.
+{{- end }}
 {{- if .Values.ui.enabled }}
-Local UI:
-  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "ociproxy.fullname" . }}-ui 8080:{{ .Values.ui.service.port }}
+Web UI:
+{{- if .Values.ingress.ui.enabled }}
+  {{ ternary "https" "http" (gt (len .Values.ingress.ui.tls) 0) }}://{{ .Values.ingress.ui.host }}
+{{- else }}
+  Not exposed. Set ingress.ui.enabled=true with a host and TLS, and ui.publicUrl.
+{{- end }}
+{{- if not .Values.ui.publicUrl }}
+  Set ui.publicUrl to the UI's HTTPS address (needed for single sign-on and
+  Secure session cookies).
+{{- end }}
 {{- end }}
 
 Local bootstrap account: {{ .Values.auth.pushUsername }}
-Local credentials are in Secret {{ include "ociproxy.secretName" . }}.
+Local credentials are in Secret {{ include "ociproxy.secretName" . }}. Password:
+  kubectl -n {{ .Release.Namespace }} get secret {{ include "ociproxy.secretName" . }} -o jsonpath='{.data.push-password}' | base64 --decode
 Never share its "secret" or "push-password" with another node.
 {{- if .Values.replica.enabled }}
 Register only this release's "replication-token" with its primary under peer ID

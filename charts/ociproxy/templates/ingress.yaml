@@ -1,5 +1,9 @@
 {{- range $component := list "primary" "replica" "ui" }}
 {{- $ing := index $.Values.ingress $component }}
+{{- /* Registries expose only client and replication routes, never /internal/ or /metrics. */}}
+{{- $defaultPaths := list "/" }}
+{{- if eq $component "primary" }}{{ $defaultPaths = list "/v2/" "/helm/" "/replication/" }}{{ end }}
+{{- if eq $component "replica" }}{{ $defaultPaths = list "/v2/" "/helm/" }}{{ end }}
 {{- if and $ing.enabled (index $.Values $component).enabled }}
 ---
 apiVersion: networking.k8s.io/v1
@@ -25,12 +29,14 @@ spec:
     - host: {{ required (printf "ingress.%s.host is required" $component) $ing.host | quote }}
       http:
         paths:
-          - path: /
+          {{- range ($ing.paths | default $defaultPaths) }}
+          - path: {{ . }}
             pathType: Prefix
             backend:
               service:
                 name: {{ include "ociproxy.fullname" $ }}-{{ $component }}
                 port:
                   name: http
+          {{- end }}
 {{- end }}
 {{- end }}

@@ -221,29 +221,37 @@ ui:
   podAnnotations: {}
   extraEnv: []
 
-# Ingress per component. A registry needs large request bodies and long
-# timeouts; for ingress-nginx add e.g.
+# Ingress per component. A registry needs large request bodies, long
+# timeouts and no buffering; for ingress-nginx add e.g.
 #   nginx.ingress.kubernetes.io/proxy-body-size: "0"
 #   nginx.ingress.kubernetes.io/proxy-read-timeout: "900"
+#   nginx.ingress.kubernetes.io/proxy-send-timeout: "900"
 #   nginx.ingress.kubernetes.io/proxy-request-buffering: "off"
+#   nginx.ingress.kubernetes.io/proxy-buffering: "off"
+# paths: empty = defaults. Registries publish only /v2/ and /helm/, plus
+# /replication/ on the primary; /internal/ and /metrics stay cluster-only.
+# The UI publishes /.
 ingress:
   primary:
     enabled: false
     className: ""
     annotations: {}
     host: ""
+    paths: []
     tls: []
   replica:
     enabled: false
     className: ""
     annotations: {}
     host: ""
+    paths: []
     tls: []
   ui:
     enabled: false
     className: ""
     annotations: {}
     host: ""
+    paths: []
     tls: []
 
 # Optional NetworkPolicies. Both roles need upstream egress for local private

@@ -18,3 +18,7 @@ dist/
 *.key
 
 *proxy-replica*.toml
+
+# Production Compose environment templates
+!.env.primary.example
+!.env.replica.example

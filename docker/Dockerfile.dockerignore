@@ -10,7 +10,7 @@ __pycache__/
 *.pyc
 .pytest_cache/
 tests/
-docker-compose.yml
+docker/docker-compose*.yml
 ociproxy.toml.example
 
 # Keep local configuration and environments out of the build context.

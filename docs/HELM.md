@@ -7,15 +7,14 @@ volumes. Do not mix legacy nodes with public-v2 nodes.
 
 ## Primary
 
-Images use [GitHub Container Registry](https://github.com/chainfirelabs/ociproxy/pkgs/container/ociproxy).
-Replace `YOUR_TAG` with a published tag. The current GitHub workflow builds only;
-these paths become pullable after image publication.
+Images are published to [GitHub Container Registry](https://github.com/chainfirelabs/ociproxy/pkgs/container/ociproxy)
+as `ghcr.io/chainfirelabs/ociproxy:1.0.1` and `ghcr.io/chainfirelabs/ociproxy/ui:1.0.1`.
+The [README](../README.md#install-with-helm) has complete production values
+files for a primary and a replica, including Ingress and TLS.
 
 ```sh
-helm install cp charts/ociproxy --namespace registry --create-namespace \
-  --set image.repository=ghcr.io/chainfirelabs/ociproxy \
-  --set ui.image.repository=ghcr.io/chainfirelabs/ociproxy/ui \
-  --set image.tag=YOUR_TAG --set ui.image.tag=YOUR_TAG
+helm upgrade --install primary charts/ociproxy --namespace registry --create-namespace \
+  -f common.yaml -f primary.yaml
 ```
 
 Defaults deploy one primary. The chart creates a local Secret and generates its
@@ -35,13 +34,12 @@ replication:
 ## Each replica is a separate release
 
 ```sh
-helm install site-a charts/ociproxy --namespace registry \
-  --set primary.enabled=false --set replica.enabled=true \
-  --set replica.primaryUrl=https://primary.example.com \
-  --set image.repository=ghcr.io/chainfirelabs/ociproxy \
-  --set ui.image.repository=ghcr.io/chainfirelabs/ociproxy/ui \
-  --set image.tag=YOUR_TAG --set ui.image.tag=YOUR_TAG
+helm upgrade --install site-a charts/ociproxy --namespace registry \
+  -f common.yaml -f replica.yaml
 ```
+
+`replica.yaml` sets `primary.enabled: false`, `replica.enabled: true` and
+`replica.primaryUrl` to the primary's public HTTPS registry address.
 
 The replica identity defaults to the release name (`site-a`); set
 `replication.id` if needed. Its separate Secret contains a generated
@@ -81,6 +79,17 @@ Helm servers, auth/CDN hosts and any proxy. DNS rules are included automatically
 `networkPolicy.primaryEgress` restricts primary upstream access similarly.
 No primary-to-replica fan-out connection or credential is needed.
 
-Persistence, probes, resource limits, ingress, ServiceMonitor and OIDC settings
+## Ingress
+
+Enable `ingress.primary` (or `ingress.replica`) and `ingress.ui` per release,
+each with its own host and TLS Secret, and set `ui.publicUrl` to the UI's
+HTTPS address. Registry Ingresses publish only `/v2/` and `/helm/`, plus
+`/replication/` on the primary. `/internal/` and `/metrics` stay reachable only
+inside the cluster. Override with `ingress.<component>.paths` if needed.
+Registry traffic needs unlimited body size, 900-second timeouts and no request or
+response buffering; [values.yaml](../charts/ociproxy/values.yaml) lists the
+ingress-nginx annotations.
+
+Persistence, probes, resource limits, ServiceMonitor and OIDC settings
 are in [values.yaml](../charts/ociproxy/values.yaml). Configure them per node/release. Registry authentication
 and UI identities are local even when public cached content is shared.

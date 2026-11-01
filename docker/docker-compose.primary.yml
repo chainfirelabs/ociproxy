@@ -1,0 +1,93 @@
+# One independent node per host. Copy to compose.yaml in the node's folder, next
+# to .env and ociproxy.toml, then run `docker compose up -d` there.
+# See docs/DOCKER.md for TLS and setup.
+name: ociproxy-primary
+
+x-runtime: &runtime
+  restart: unless-stopped
+  init: true
+  user: "65532:65532"
+  read_only: true
+  tmpfs:
+    - /tmp:size=64m,mode=1777
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  stop_grace_period: 60s
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "5"
+
+services:
+  registry:
+    <<: *runtime
+    image: ${OCIPROXY_IMAGE:-ghcr.io/chainfirelabs/ociproxy:1.0.1}
+    mem_limit: ${REGISTRY_MEMORY_LIMIT:-1g}
+    environment:
+      OCIPROXY_ROLE: primary
+      OCIPROXY_LISTEN: 0.0.0.0
+      OCIPROXY_PORT: "5000"
+      OCIPROXY_STORAGE_PATH: /var/lib/ociproxy
+      OCIPROXY_CONFIG: /app/ociproxy.toml
+      OCIPROXY_SECRET: ${OCIPROXY_SECRET:?set a unique local administration secret}
+      OCIPROXY_PUSH_USERNAME: ${PUSH_USERNAME:-admin}
+      OCIPROXY_PUSH_PASSWORD: ${PUSH_PASSWORD:?set a unique local bootstrap password}
+      OCIPROXY_ADVERTISED_URL: ${REGISTRY_PUBLIC_URL:?set this node's HTTPS registry URL}
+      OCIPROXY_REPLICATION_PEERS: ${REPLICATION_PEERS:?set the primary peer allowlist}
+      OCIPROXY_DEFAULT_VISIBILITY: ${DEFAULT_VISIBILITY:-private}
+      OCIPROXY_TAG_TTL: ${TAG_TTL:-300}
+      OCIPROXY_GC_INTERVAL: ${GC_INTERVAL:-3600}
+      OCIPROXY_GC_MANIFEST_MAX_IDLE_DAYS: ${GC_MANIFEST_MAX_IDLE_DAYS:-0}
+      OCIPROXY_GC_BLOB_GRACE: ${GC_BLOB_GRACE:-86400}
+      OCIPROXY_GC_DISK_HIGH_PERCENT: ${GC_DISK_HIGH_PERCENT:-85}
+      OCIPROXY_GC_DISK_LOW_PERCENT: ${GC_DISK_LOW_PERCENT:-75}
+      OCIPROXY_GC_MAX_CACHE_BYTES: ${GC_MAX_CACHE_BYTES:-0}
+      OCIPROXY_UPSTREAM_PROXY: ${UPSTREAM_PROXY:-}
+      OCIPROXY_LOG_FORMAT: json
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${REGISTRY_PORT:-5000}:5000"
+    volumes:
+      - type: bind
+        source: ${NODE_CONFIG:-./ociproxy.toml}
+        target: /app/ociproxy.toml
+        read_only: true
+        bind:
+          create_host_path: false
+      - data:/var/lib/ociproxy
+    healthcheck:
+      test: ["CMD", "/usr/bin/python3", "-c", "import urllib.request as u; u.build_opener(u.ProxyHandler({})).open('http://127.0.0.1:5000/v2/', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  ui:
+    <<: *runtime
+    image: ${OCIPROXY_UI_IMAGE:-ghcr.io/chainfirelabs/ociproxy/ui:1.0.1}
+    mem_limit: ${UI_MEMORY_LIMIT:-256m}
+    depends_on:
+      registry:
+        condition: service_healthy
+    environment:
+      OCIPROXY_URL: http://registry:5000
+      OCIPROXY_SECRET: ${OCIPROXY_SECRET:?set this node's local secret}
+      UI_PUBLIC_URL: ${UI_PUBLIC_URL:?set this node's HTTPS UI URL}
+      OIDC_ISSUER: ${OIDC_ISSUER:-}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
+      OIDC_PROVIDER_NAME: ${OIDC_PROVIDER_NAME:-}
+      OIDC_ADMIN_GROUP: ${OIDC_ADMIN_GROUP:-}
+      OIDC_PUSHER_GROUP: ${OIDC_PUSHER_GROUP:-}
+      OIDC_READER_GROUP: ${OIDC_READER_GROUP:-}
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${UI_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "/usr/bin/python3", "-c", "import urllib.request as u; u.build_opener(u.ProxyHandler({})).open('http://127.0.0.1:8080/api/auth/config', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  data:
