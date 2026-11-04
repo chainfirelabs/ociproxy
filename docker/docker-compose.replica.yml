@@ -1,6 +1,8 @@
 # One independent node per host. Copy to compose.yaml in the node's folder, next
 # to .env and ociproxy.toml, then run `docker compose up -d` there.
-# See docs/DOCKER.md for TLS and setup.
+# Traefik is the only service bound to the host (80/443) and serves your
+# certificate from ./certs for OCIPROXY_HOST. For Let's Encrypt instead, see
+# docker/compose.letsencrypt.yml. See docs/DOCKER.md.
 name: ociproxy-replica
 
 x-runtime: &runtime
@@ -22,7 +24,7 @@ x-runtime: &runtime
 services:
   registry:
     <<: *runtime
-    image: ${OCIPROXY_IMAGE:-ghcr.io/chainfirelabs/ociproxy:1.0.1}
+    image: ${OCIPROXY_IMAGE:-ghcr.io/chainfirelabs/ociproxy:1.0.2}
     mem_limit: ${REGISTRY_MEMORY_LIMIT:-1g}
     environment:
       OCIPROXY_ROLE: replica
@@ -33,7 +35,7 @@ services:
       OCIPROXY_SECRET: ${OCIPROXY_SECRET:?set a unique local administration secret}
       OCIPROXY_PUSH_USERNAME: ${PUSH_USERNAME:-admin}
       OCIPROXY_PUSH_PASSWORD: ${PUSH_PASSWORD:?set a unique local bootstrap password}
-      OCIPROXY_ADVERTISED_URL: ${REGISTRY_PUBLIC_URL:?set this node's HTTPS registry URL}
+      OCIPROXY_ADVERTISED_URL: https://${OCIPROXY_HOST:?set this node's DNS name}
       OCIPROXY_PRIMARY_URL: ${PRIMARY_URL:?set the primary HTTPS registry URL}
       OCIPROXY_REPLICATION_ID: ${REPLICATION_ID:?set the peer ID registered on the primary}
       OCIPROXY_REPLICATION_TOKEN: ${REPLICATION_TOKEN:?set this peer's replication token}
@@ -46,9 +48,11 @@ services:
       OCIPROXY_GC_DISK_LOW_PERCENT: ${GC_DISK_LOW_PERCENT:-75}
       OCIPROXY_GC_MAX_CACHE_BYTES: ${GC_MAX_CACHE_BYTES:-0}
       OCIPROXY_UPSTREAM_PROXY: ${UPSTREAM_PROXY:-}
+      # Extra CAs (*.crt/*.pem in ./trust) trusted for replication and upstream
+      # HTTPS, on top of the public ones. An empty folder adds none. The UI
+      # uses the same folder for its OIDC provider.
+      OCIPROXY_CA_PATH: /etc/ociproxy/trust
       OCIPROXY_LOG_FORMAT: json
-    ports:
-      - "${BIND_ADDRESS:-127.0.0.1}:${REGISTRY_PORT:-5000}:5000"
     volumes:
       - type: bind
         source: ${NODE_CONFIG:-./ociproxy.toml}
@@ -57,8 +61,14 @@ services:
         bind:
           create_host_path: false
       - data:/var/lib/ociproxy
+      - type: bind
+        source: ${TRUST_DIR:-./trust}
+        target: /etc/ociproxy/trust
+        read_only: true
+        bind:
+          create_host_path: true
     healthcheck:
-      test: ["CMD", "/usr/bin/python3", "-c", "import urllib.request as u; u.build_opener(u.ProxyHandler({})).open('http://127.0.0.1:5000/v2/', timeout=5)"]
+      test: ["CMD", "/usr/bin/python3", "-S", "-m", "ociproxy.healthcheck"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -66,7 +76,7 @@ services:
 
   ui:
     <<: *runtime
-    image: ${OCIPROXY_UI_IMAGE:-ghcr.io/chainfirelabs/ociproxy/ui:1.0.1}
+    image: ${OCIPROXY_UI_IMAGE:-ghcr.io/chainfirelabs/ociproxy/ui:1.0.2}
     mem_limit: ${UI_MEMORY_LIMIT:-256m}
     depends_on:
       registry:
@@ -74,7 +84,7 @@ services:
     environment:
       OCIPROXY_URL: http://registry:5000
       OCIPROXY_SECRET: ${OCIPROXY_SECRET:?set this node's local secret}
-      UI_PUBLIC_URL: ${UI_PUBLIC_URL:?set this node's HTTPS UI URL}
+      UI_PUBLIC_URL: https://${OCIPROXY_HOST:?set this node's DNS name}
       OIDC_ISSUER: ${OIDC_ISSUER:-}
       OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
@@ -82,14 +92,116 @@ services:
       OIDC_ADMIN_GROUP: ${OIDC_ADMIN_GROUP:-}
       OIDC_PUSHER_GROUP: ${OIDC_PUSHER_GROUP:-}
       OIDC_READER_GROUP: ${OIDC_READER_GROUP:-}
-    ports:
-      - "${BIND_ADDRESS:-127.0.0.1}:${UI_PORT:-8080}:8080"
+      # Same ./trust CAs, for an OIDC provider with an internal-CA certificate.
+      OCIPROXY_CA_PATH: /etc/ociproxy/trust
+    volumes:
+      - type: bind
+        source: ${TRUST_DIR:-./trust}
+        target: /etc/ociproxy/trust
+        read_only: true
+        bind:
+          create_host_path: true
     healthcheck:
-      test: ["CMD", "/usr/bin/python3", "-c", "import urllib.request as u; u.build_opener(u.ProxyHandler({})).open('http://127.0.0.1:8080/api/auth/config', timeout=5)"]
+      test: ["CMD", "/usr/bin/python3", "-S", "-m", "ociproxy_ui.healthcheck"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 30s
+
+  # The only service bound to the host. Terminates TLS and
+  # serves the registry and web UI on one DNS name: /v2/, /helm/ and
+  # /replication/ go to the registry, everything else to the UI.
+  traefik:
+    image: ${TRAEFIK_IMAGE:-traefik:v3.7.17}
+    restart: unless-stopped
+    # Not read_only: Compose writes the inline configs into the container.
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: ${TRAEFIK_MEMORY_LIMIT:-256m}
+    stop_grace_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    # Static configuration as environment variables (not command flags), so an
+    # override file such as docker/compose.letsencrypt.yml can add settings.
+    environment:
+      TRAEFIK_GLOBAL_CHECKNEWVERSION: "false"
+      TRAEFIK_GLOBAL_SENDANONYMOUSUSAGE: "false"
+      TRAEFIK_LOG_FORMAT: json
+      TRAEFIK_PING: "true"
+      TRAEFIK_PROVIDERS_FILE_DIRECTORY: /etc/traefik/dynamic
+      TRAEFIK_ENTRYPOINTS_WEB_ADDRESS: ":80"
+      TRAEFIK_ENTRYPOINTS_WEB_HTTP_REDIRECTIONS_ENTRYPOINT_TO: websecure
+      TRAEFIK_ENTRYPOINTS_WEB_HTTP_REDIRECTIONS_ENTRYPOINT_SCHEME: https
+      TRAEFIK_ENTRYPOINTS_WEBSECURE_ADDRESS: ":443"
+      TRAEFIK_ENTRYPOINTS_WEBSECURE_HTTP_TLS: "true"
+      # Large layer uploads and downloads stream for a long time: no read/write
+      # deadline (Traefik v3 defaults to a 60s read timeout).
+      TRAEFIK_ENTRYPOINTS_WEBSECURE_TRANSPORT_RESPONDINGTIMEOUTS_READTIMEOUT: 0s
+      TRAEFIK_ENTRYPOINTS_WEBSECURE_TRANSPORT_RESPONDINGTIMEOUTS_WRITETIMEOUT: 0s
+      TRAEFIK_ENTRYPOINTS_WEBSECURE_TRANSPORT_RESPONDINGTIMEOUTS_IDLETIMEOUT: 900s
+    ports:
+      - "80:80"
+      - "443:443"
+    configs:
+      - source: traefik-routes
+        target: /etc/traefik/dynamic/routes.yml
+      - source: traefik-tls
+        target: /etc/traefik/dynamic/tls.yml
+    volumes:
+      # Your certificate: tls.crt (full chain, leaf first) and tls.key.
+      - type: bind
+        source: ${TLS_CERT_DIR:-./certs}
+        target: /certs
+        read_only: true
+        bind:
+          create_host_path: false
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+configs:
+  # Routers inherit TLS from the websecure entry point.
+  traefik-routes:
+    content: |
+      http:
+        routers:
+          registry:
+            rule: "Host(`${OCIPROXY_HOST:?set this node's DNS name}`) && (PathPrefix(`/v2/`) || PathPrefix(`/helm/`) || PathPrefix(`/replication/`))"
+            priority: 100
+            entryPoints: [websecure]
+            service: registry
+          ui:
+            rule: "Host(`${OCIPROXY_HOST:?set this node's DNS name}`)"
+            priority: 10
+            entryPoints: [websecure]
+            service: ui
+        services:
+          registry:
+            loadBalancer:
+              servers:
+                - url: http://registry:5000
+          ui:
+            loadBalancer:
+              servers:
+                - url: http://ui:8080
+  traefik-tls:
+    content: |
+      tls:
+        certificates:
+          - certFile: /certs/tls.crt
+            keyFile: /certs/tls.key
+        stores:
+          default:
+            defaultCertificate:
+              certFile: /certs/tls.crt
+              keyFile: /certs/tls.key
 
 volumes:
   data:

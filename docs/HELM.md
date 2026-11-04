@@ -8,7 +8,9 @@ volumes. Do not mix legacy nodes with public-v2 nodes.
 ## Primary
 
 Images are published to [GitHub Container Registry](https://github.com/chainfirelabs/ociproxy/pkgs/container/ociproxy)
-as `ghcr.io/chainfirelabs/ociproxy:1.0.1` and `ghcr.io/chainfirelabs/ociproxy/ui:1.0.1`.
+as `ghcr.io/chainfirelabs/ociproxy:1.0.2` and `ghcr.io/chainfirelabs/ociproxy/ui:1.0.2`.
+The chart defaults to both (its `appVersion`); set `image.tag` and
+`ui.image.tag` together to pin another version.
 The [README](../README.md#install-with-helm) has complete production values
 files for a primary and a replica, including Ingress and TLS.
 
@@ -71,6 +73,22 @@ Replicas import the public catalog without replacing their private configuration
 A peer needs explicit `publish: true` permission to publish anonymous public
 sources. It can update/delete only its own managed public entries. Private
 Docker and Helm fetches go directly upstream from whichever node owns them.
+
+When nodes or the OIDC provider use certificates from an internal CA, give the
+release that CA: each replica needs the one that signed the primary's
+certificate, and any node whose UI uses OIDC needs the provider's. Create a
+ConfigMap (or Secret) holding the PEM file and name it in `trustedCA`; every
+`.crt`/`.pem` key is trusted, on top of the public CAs, by the registry
+(replication, upstream registries) and the UI (OIDC):
+
+```sh
+kubectl -n registry create configmap internal-ca --from-file=internal-ca.crt
+```
+
+```yaml
+trustedCA:
+  configMapName: internal-ca   # or secretName: ...
+```
 
 NetworkPolicy is optional. Egress is unrestricted by default so private sources
 can be reached. Setting `networkPolicy.replicaExtraEgress` enables explicit

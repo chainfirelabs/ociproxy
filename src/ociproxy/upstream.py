@@ -87,7 +87,7 @@ class UpstreamClient:
 
         resp = await go()
         if resp.status_code != 401:
-            return resp
+            return await self._anonymous_denied(resp, path)
 
         challenge = resp.headers.get("www-authenticate", "")
         if not challenge.lower().startswith("bearer"):
@@ -95,15 +95,41 @@ class UpstreamClient:
             if self.upstream.username:
                 await resp.aclose()
                 return await go((self.upstream.username, self.upstream.password or ""))
-            raise UpstreamError(401, f"unauthorized by {self.upstream.name}: {challenge!r}")
+            return await self._anonymous_denied(resp, path)
 
         params = dict(_CHALLENGE_RE.findall(challenge))
-        token = await self._get_token(
-            params.get("realm", ""), params.get("service", ""), params.get("scope", "")
-        )
+        try:
+            token = await self._get_token(
+                params.get("realm", ""), params.get("service", ""), params.get("scope", "")
+            )
+        except UpstreamError as e:
+            if e.status in (401, 403) and not self.upstream.username:
+                await resp.aclose()
+                raise self._not_found(path) from None
+            raise
         headers["Authorization"] = f"Bearer {token}"
         await resp.aclose()
-        return await go()
+        return await self._anonymous_denied(await go(), path)
+
+    async def _anonymous_denied(self, resp: httpx.Response, path: str) -> httpx.Response:
+        """Turn a final 401/403 for an anonymous source into 404.
+
+        Registries refuse anonymous access to repositories that do not exist
+        (Docker Hub answers 401 even with a valid anonymous token), and there
+        are no credentials left to try. Passing 401 on would tell OUR client
+        to authenticate to this node, which cannot help; registry-mirror
+        clients also fall back to the source registry only on 404.
+        Sources with credentials keep the upstream's status: there it may
+        mean wrong credentials, which must stay visible as a source error.
+        """
+        if resp.status_code in (401, 403) and not self.upstream.username:
+            await resp.aclose()
+            raise self._not_found(path)
+        return resp
+
+    def _not_found(self, path: str) -> UpstreamError:
+        return UpstreamError(404, f"{path}: not found on {self.upstream.name} "
+                                  "(anonymous access denied: missing or private)")
 
     async def _get_token(self, realm: str, service: str, scope: str) -> str:
         if not realm:

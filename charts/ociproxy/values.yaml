@@ -3,13 +3,22 @@
 # See docs/ISOLATION.md and docs/HELM.md before upgrading old volumes.
 
 image:
-  # The proxy image built from docker/Dockerfile (both roles use it).
-  repository: ociproxy
-  # Defaults to the chart's appVersion.
+  # The published proxy image (docker/Dockerfile); both roles use it.
+  repository: ghcr.io/chainfirelabs/ociproxy
+  # Defaults to the chart's appVersion. Keep it equal to ui.image.tag.
   tag: ""
   pullPolicy: IfNotPresent
 
 imagePullSecrets: []
+
+# Extra CAs trusted for outbound HTTPS, on top of the public ones, by the
+# registry (replication to the primary, upstream registries) and the UI (OIDC
+# provider). Use it when nodes or the identity provider have certificates from
+# an internal CA. Name ONE existing ConfigMap or Secret; every key ending in
+# .crt or .pem is loaded.
+trustedCA:
+  configMapName: ""
+  secretName: ""
 # Cluster DNS domain, for the in-cluster URLs the chart builds.
 clusterDomain: cluster.local
 nameOverride: ""
@@ -182,8 +191,9 @@ replica:
 ui:
   enabled: true
   image:
-    # The UI image built from docker/Dockerfile.ui.
-    repository: ociproxy-ui
+    # The published UI image (docker/Dockerfile.ui).
+    repository: ghcr.io/chainfirelabs/ociproxy/ui
+    # Defaults to the chart's appVersion.
     tag: ""
     pullPolicy: IfNotPresent
   # Proxy URL the UI manages. Empty = this release's primary Service.

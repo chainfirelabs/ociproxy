@@ -110,6 +110,7 @@ spec:
             secretName: {{ include "ociproxy.configSecretName" $ }}
         - name: tmp
           emptyDir: {}
+        {{- include "ociproxy.trustedCAVolume" $ | nindent 8 }}
         {{- if not $c.persistence.enabled }}
         - name: data
           emptyDir: {}

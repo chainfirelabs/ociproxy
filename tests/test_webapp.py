@@ -394,3 +394,51 @@ async def test_ui_sources_admin_only_and_csrf(primary, fake_upstream):
         assert r.status_code == 409
         assert (await c.delete("/api/sources/oci/viaui", headers=CSRF)).status_code == 204
         assert primary.app_obj.config.upstream_by_prefix("renamed") is None
+
+
+# -- OIDC provider with an internal-CA certificate (OCIPROXY_CA_PATH) -----------------
+
+@pytest.fixture
+def https_idp(internal_ca):
+    p = FakeOIDC()
+    p.start(ssl_certfile=str(internal_ca / "server.crt"), ssl_keyfile=str(internal_ca / "server.key"))
+    yield p
+    p.stop()
+
+
+async def test_oidc_provider_signed_by_internal_ca(primary, https_idp, internal_ca, tmp_path):
+    https_idp.user["groups"] = ["registry-admins"]
+    trust = tmp_path / "trust"
+    trust.mkdir()
+    (trust / "internal-ca.crt").write_bytes((internal_ca / "ca.crt").read_bytes())
+    assert https_idp.issuer.startswith("https://")
+
+    async with ui_client(primary.url, oidc=oidc_settings(https_idp), ca_path=str(trust)) as c:
+        r = await c.get("/auth/oidc/start")
+        assert r.status_code == 302, r.text
+        async with httpx.AsyncClient(verify=str(internal_ca / "ca.crt")) as browser:
+            r = await browser.get(r.headers["location"])
+        back = urlsplit(r.headers["location"])
+        r = await c.get(f"{back.path}?{back.query}")  # token + userinfo over internal-CA TLS
+        assert r.status_code == 302 and r.headers["location"] == "/", r.text
+        me = (await c.get("/api/me")).json()
+        assert (me["username"], me["role"], me["source"]) == ("olga", "admin", "oidc")
+
+
+async def test_oidc_provider_with_internal_ca_fails_without_trust(primary, https_idp):
+    async with ui_client(primary.url, oidc=oidc_settings(https_idp)) as c:
+        r = await c.get("/auth/oidc/start")
+        assert r.status_code != 302
+        assert "certificate" in r.text.lower() or r.status_code >= 500, r.text
+
+
+def test_ui_reads_ca_path_from_env(monkeypatch, internal_ca, tmp_path):
+    import ssl
+    from ociproxy_ui.app import create_app as mk
+
+    monkeypatch.setenv("OCIPROXY_CA_PATH", str(internal_ca / "ca.crt"))
+    app = mk(proxy_url="http://primary:5000", secret=SECRET)
+    assert app is not None
+    monkeypatch.setenv("OCIPROXY_CA_PATH", str(tmp_path / "missing"))
+    with pytest.raises(ValueError, match="does not exist"):
+        mk(proxy_url="http://primary:5000", secret=SECRET)

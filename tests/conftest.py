@@ -37,8 +37,11 @@ def free_port() -> int:
 class Node:
     """A ociproxy node running in a background thread."""
 
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, ssl_certfile: str | None = None,
+                 ssl_keyfile: str | None = None):
         self.config = config
+        # Serve HTTPS (for TLS trust tests) when a certificate is given.
+        self.ssl_certfile, self.ssl_keyfile = ssl_certfile, ssl_keyfile
         if not config.is_primary and config.primary_url in _RUNNING_NODES:
             _RUNNING_NODES[config.primary_url].config.replication_peers[config.replication_id] = {
                 "token": config.replication_token, "publish": True}
@@ -50,6 +53,7 @@ class Node:
         cfg = uvicorn.Config(
             self.app_obj.app, host="127.0.0.1", port=self.config.port,
             log_level="warning", access_log=False, timeout_graceful_shutdown=2,
+            ssl_certfile=self.ssl_certfile, ssl_keyfile=self.ssl_keyfile,
         )
         self.server = uvicorn.Server(cfg)
         self._thread = threading.Thread(target=self.server.run, daemon=True)
@@ -73,7 +77,8 @@ class Node:
 
     @property
     def url(self) -> str:
-        return f"http://127.0.0.1:{self.config.port}"
+        scheme = "https" if self.ssl_certfile else "http"
+        return f"{scheme}://127.0.0.1:{self.config.port}"
 
 
 def make_config(
@@ -191,3 +196,57 @@ def make_replica(tmp_path, primary, name: str, upstreams: list[UpstreamConfig] |
         advertised_url=f"http://127.0.0.1:{port}",
         port=port,
     )).start()
+
+
+# -- internal CA (TLS trust tests) ----------------------------------------------------
+
+import datetime as dt  # noqa: E402
+import ipaddress  # noqa: E402
+
+from cryptography import x509  # noqa: E402
+from cryptography.hazmat.primitives import hashes, serialization  # noqa: E402
+from cryptography.hazmat.primitives.asymmetric import ec  # noqa: E402
+from cryptography.x509.oid import NameOID  # noqa: E402
+
+
+def _name(cn: str) -> x509.Name:
+    return x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, cn)])
+
+
+def _pem(cert) -> bytes:
+    return cert.public_bytes(serialization.Encoding.PEM)
+
+
+@pytest.fixture
+def internal_ca(tmp_path):
+    """CA cert + a server cert for 127.0.0.1/localhost it signed. Like many
+    internal CAs, the leaf has no authorityKeyIdentifier."""
+    now = dt.datetime.now(dt.timezone.utc)
+    ca_key = ec.generate_private_key(ec.SECP256R1())
+    ca = (x509.CertificateBuilder().subject_name(_name("test internal CA"))
+          .issuer_name(_name("test internal CA")).public_key(ca_key.public_key())
+          .serial_number(x509.random_serial_number())
+          .not_valid_before(now - dt.timedelta(minutes=1)).not_valid_after(now + dt.timedelta(days=1))
+          .add_extension(x509.BasicConstraints(ca=True, path_length=None), critical=True)
+          .add_extension(x509.KeyUsage(digital_signature=True, key_cert_sign=True, crl_sign=True,
+                                       content_commitment=False, key_encipherment=False,
+                                       data_encipherment=False, key_agreement=False,
+                                       encipher_only=False, decipher_only=False), critical=True)
+          .sign(ca_key, hashes.SHA256()))
+    key = ec.generate_private_key(ec.SECP256R1())
+    leaf = (x509.CertificateBuilder().subject_name(_name("localhost")).issuer_name(ca.subject)
+            .public_key(key.public_key()).serial_number(x509.random_serial_number())
+            .not_valid_before(now - dt.timedelta(minutes=1)).not_valid_after(now + dt.timedelta(days=1))
+            .add_extension(x509.SubjectAlternativeName([
+                x509.DNSName("localhost"), x509.IPAddress(ipaddress.ip_address("127.0.0.1"))]),
+                critical=False)
+            .add_extension(x509.ExtendedKeyUsage([x509.oid.ExtendedKeyUsageOID.SERVER_AUTH]),
+                           critical=False)
+            .sign(ca_key, hashes.SHA256()))
+    d = tmp_path / "pki"
+    d.mkdir()
+    (d / "ca.crt").write_bytes(_pem(ca))
+    (d / "server.crt").write_bytes(_pem(leaf))
+    (d / "server.key").write_bytes(key.private_bytes(
+        serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()))
+    return d

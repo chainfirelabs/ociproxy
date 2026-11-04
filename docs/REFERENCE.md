@@ -32,6 +32,7 @@ primary example and [ISOLATION.md](ISOLATION.md#configuration) for peer setup.
 | `DEFAULT_VISIBILITY` | Visibility of paths without a specific source/rule setting |
 | `TAG_TTL` | Cached tag/index freshness, default 300 seconds |
 | `UPSTREAM_PROXY` | This node's upstream HTTP proxy |
+| `CA_PATH` | PEM file or directory of extra CAs trusted for outbound HTTPS (replication, upstreams), in addition to the public bundle; TOML `[network] ca_path`. The UI reads the same `OCIPROXY_CA_PATH` for its OIDC provider |
 | `GC_INTERVAL` | Maintenance interval, default 3600 seconds |
 | `GC_MANIFEST_MAX_IDLE_DAYS` | Mirrored manifest retention, zero keeps indefinitely |
 | `GC_BLOB_GRACE` | Minimum orphan blob age before deletion, default 86400 seconds |
@@ -106,6 +107,9 @@ Optional OIDC is configured per UI with `OIDC_ISSUER`, `OIDC_CLIENT_ID`,
 `OIDC_CLIENT_SECRET` and `UI_PUBLIC_URL`. The callback is
 `<UI_PUBLIC_URL>/auth/oidc/callback`. Configure the provider's username/group claims
 and local `OIDC_ADMIN_GROUP`, `OIDC_PUSHER_GROUP`, `OIDC_READER_GROUP` mappings.
+If the provider's certificate comes from an internal CA, set `OCIPROXY_CA_PATH`
+on the UI to that CA's PEM file or folder (Compose: the node's `trust` folder;
+Helm: `trustedCA`).
 The authorization-code flow uses PKCE, state and nonce checks. Use independent
 client configuration per node as appropriate; account provisioning remains local.
 
@@ -115,6 +119,10 @@ The Docker/OCI API lives under `/v2/`; classic Helm under `/helm/<name>/`.
 `/v2/` remains public for health checks. `/v2/_catalog` lists this node's repository
 names and is authenticated when it contains private paths. Manifests, tags,
 blobs and Helm requests enforce this node's visibility rules.
+Pulls carrying a registry-mirror `ns=<registry>` query parameter (sent by
+Docker and containerd mirrors) resolve to the source for that registry, with
+its visibility, never to locally pushed repositories; with no matching source
+they return 404. See [Docker Hub mirror](DOCKER.md#docker-hub-mirror).
 
 Local administration endpoints under `/internal/` require this node's local
 secret. Account/source mutations also require a valid local acting user and role:

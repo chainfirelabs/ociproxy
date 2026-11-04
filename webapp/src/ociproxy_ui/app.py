@@ -27,6 +27,7 @@ from starlette.routing import Route
 from .index_html import INDEX_HTML
 from .oidc import OIDCClient, OIDCError, OIDCSettings, new_flow
 from .session import Signer
+from .tls import verify_setting
 
 log = logging.getLogger("ociproxy.ui")
 
@@ -60,7 +61,7 @@ def _error(status: int, message: str) -> JSONResponse:
 class UI:
     def __init__(self, proxy_url: str, secret: str, public_url: str | None = None,
                  oidc: OIDCSettings | None = None, session_hours: float = 12.0,
-                 node_url: str | None = None):
+                 node_url: str | None = None, ca_path: str | None = None):
         # UI_NODE_URL is a legacy alias for the local backend, never a second
         # node whose account authority or private inventory is consulted.
         self.proxy_url = (node_url or proxy_url).rstrip("/")
@@ -70,16 +71,21 @@ class UI:
         self.session_max_age = session_hours * 3600
         self.sessions = Signer(secret, f"session:{self.proxy_url}")
         self.flows = Signer(secret, f"oidc-flow:{self.proxy_url}")
+        # Public CA bundle plus any OCIPROXY_CA_PATH CAs (e.g. an identity
+        # provider with an internal-CA certificate), for every client.
+        verify = verify_setting(ca_path)
         # Internal traffic: never honor HTTP_PROXY/HTTPS_PROXY. The proxy
         # lives on the container network; a corporate proxy cannot resolve it.
         self.http = httpx.AsyncClient(
             base_url=self.proxy_url, timeout=httpx.Timeout(15.0, connect=5.0), trust_env=False,
+            verify=verify,
         )
         self.node_http = httpx.AsyncClient(
             base_url=self.node_url, timeout=httpx.Timeout(10.0, connect=5.0), trust_env=False,
+            verify=verify,
         ) if self.node_url else None
         # The identity provider is external: environment proxies apply.
-        self.idp_http = httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=5.0))
+        self.idp_http = httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=5.0), verify=verify)
         self.oidc = OIDCClient(oidc, self.idp_http) if oidc else None
 
     async def aclose(self) -> None:
@@ -290,7 +296,7 @@ class UI:
 
 def create_app(proxy_url: str | None = None, secret: str | None = None, *,
                public_url: str | None = None, oidc: OIDCSettings | None = None,
-               node_url: str | None = None) -> Starlette:
+               node_url: str | None = None, ca_path: str | None = None) -> Starlette:
     public_url = public_url or os.environ.get("UI_PUBLIC_URL") or None
     if oidc is None:
         oidc = OIDCSettings.from_env(public_url)
@@ -304,6 +310,7 @@ def create_app(proxy_url: str | None = None, secret: str | None = None, *,
         oidc=oidc,
         session_hours=float(os.environ.get("UI_SESSION_HOURS", "12")),
         node_url=node_url or os.environ.get("UI_NODE_URL") or None,
+        ca_path=ca_path or os.environ.get("OCIPROXY_CA_PATH") or None,
     )
     r = ui.route
     routes = [

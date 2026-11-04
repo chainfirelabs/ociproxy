@@ -38,6 +38,7 @@ from .notify import ChangeSignal
 from .replication import TAIL_SERIAL_KEY, PrimaryClient, ReplicaTail, event_to_json
 from .resolver import ResolveError, Resolver
 from .sources import SourceRegistry
+from .tls import verify_setting
 from .sources_api import SourcesAPI
 from .store import HELM_NS, LOCAL, Store, ensure_node_id, parse_digest
 from .upstream import UpstreamClient
@@ -167,7 +168,10 @@ class App:
         self.store.add_listener(self.changes.notify)
         # Upstream traffic honors HTTP_PROXY/HTTPS_PROXY/NO_PROXY (trust_env)
         # or an explicit OCIPROXY_UPSTREAM_PROXY.
+        # Public CA bundle plus any OCIPROXY_CA_PATH CAs, for both clients.
+        verify = verify_setting(config.ca_path)
         self.upstream_http = httpx.AsyncClient(
+            verify=verify,
             follow_redirects=True,
             timeout=httpx.Timeout(60.0, connect=10.0),
             limits=httpx.Limits(max_connections=100),
@@ -177,6 +181,7 @@ class App:
         # Node-to-node replication traffic is NEVER proxied: a corporate proxy
         # cannot reach cluster-internal hostnames (primary/replica-1/...).
         self.internal_http = httpx.AsyncClient(
+            verify=verify,
             follow_redirects=False,
             timeout=httpx.Timeout(60.0, connect=10.0),
             limits=httpx.Limits(max_connections=100),
@@ -482,6 +487,17 @@ class App:
     async def v2_dispatch(self, request: Request) -> Response:
         rest = request.path_params["rest"]
         method = request.method
+
+        # Registry-mirror requests name the registry they stand in for:
+        # `docker pull grafana/grafana` via a daemon mirror arrives as
+        # /v2/grafana/grafana/...?ns=docker.io. Serve that source's content
+        # under its own prefix (and visibility), never the local namespace.
+        ns = request.query_params.get("ns")
+        if ns and method in ("GET", "HEAD"):
+            u = self.config.upstream_for_registry(ns)
+            if u is None:
+                return registry_error(404, "NAME_UNKNOWN", f"no source mirrors {ns}")
+            rest = f"{u.prefix}/{rest}"
 
         if rest.endswith("/tags/list"):
             if method in ("GET", "HEAD"):

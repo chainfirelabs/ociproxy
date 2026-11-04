@@ -1,0 +1,31 @@
+# Optional: Let's Encrypt certificates instead of your own files in ./certs.
+# Works with the primary and replica stacks. Copy it into the node's folder as
+# compose.override.yaml, which Compose merges into compose.yaml automatically:
+#
+#   cp ~/ociproxy-src/docker/compose.letsencrypt.yml compose.override.yaml
+#
+# Requirements: OCIPROXY_HOST resolves publicly to this host and TCP 443 is
+# reachable from the internet (TLS-ALPN challenge). Needs Docker Compose
+# 2.24.4 or later (!override). See docs/DOCKER.md#lets-encrypt.
+#
+# Optional .env settings:
+#   ACME_EMAIL=you@example.com
+#   ACME_CA_SERVER=https://acme-staging-v02.api.letsencrypt.org/directory  # testing
+services:
+  traefik:
+    environment:
+      TRAEFIK_ENTRYPOINTS_WEBSECURE_HTTP_TLS_CERTRESOLVER: le
+      TRAEFIK_CERTIFICATESRESOLVERS_LE_ACME_TLSCHALLENGE: "true"
+      TRAEFIK_CERTIFICATESRESOLVERS_LE_ACME_EMAIL: ${ACME_EMAIL:-}
+      TRAEFIK_CERTIFICATESRESOLVERS_LE_ACME_CASERVER: ${ACME_CA_SERVER:-https://acme-v02.api.letsencrypt.org/directory}
+      TRAEFIK_CERTIFICATESRESOLVERS_LE_ACME_STORAGE: /letsencrypt/acme.json
+    # Drop the ./certs mount and file certificate; keep the routes.
+    configs: !override
+      - source: traefik-routes
+        target: /etc/traefik/dynamic/routes.yml
+    volumes: !override
+      - acme:/letsencrypt
+
+volumes:
+  # Issued certificates and the ACME account; keep it to avoid rate limits.
+  acme:

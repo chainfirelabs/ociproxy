@@ -72,6 +72,11 @@ class FakeUpstream:
         self.manifests: dict[tuple[str, str], tuple[str, bytes, str]] = {}
         self.hits: Counter[str] = Counter()
         self.require_auth = True
+        # Docker Hub style: repos with no manifests answer 401 even to a valid
+        # token, instead of 404.
+        self.deny_unknown_repos = False
+        # Token endpoint status (e.g. 401 to refuse anonymous tokens).
+        self.token_status = 200
         self.last_accept: str | None = None
         self.last_blob_accept_encoding: str | None = None
         # tags/list page size cap (forces Link pagination in tests).
@@ -263,12 +268,22 @@ class FakeUpstream:
 
     async def token(self, request: Request) -> Response:
         self.hits["token"] += 1
+        if self.token_status != 200:
+            return Response(status_code=self.token_status)
         return JSONResponse({"token": FAKE_TOKEN, "expires_in": 300})
+
+    def _denied_unknown(self, repo: str) -> Response | None:
+        if self.deny_unknown_repos and not any(r == repo for (r, _ref) in self.manifests):
+            return JSONResponse({"errors": [{"code": "UNAUTHORIZED"}]}, status_code=401,
+                                headers={"Www-Authenticate": self._challenge(repo).headers["www-authenticate"]})
+        return None
 
     async def tags(self, request: Request) -> Response:
         repo = request.path_params["repo"]
         if self.require_auth and not self._authed(request):
             return self._challenge(repo)
+        if (denied := self._denied_unknown(repo)) is not None:
+            return denied
         self.hits[f"tags:{repo}"] += 1
         tags = sorted(ref for (r, ref) in self.manifests if r == repo and ":" not in ref)
         if not tags:
@@ -288,6 +303,8 @@ class FakeUpstream:
         ref = request.path_params["ref"]
         if self.require_auth and not self._authed(request):
             return self._challenge(repo)
+        if (denied := self._denied_unknown(repo)) is not None:
+            return denied
         # HEADs (tag revalidation) are counted separately from full GETs.
         kind = "manifest-head" if request.method == "HEAD" else "manifest"
         self.hits[f"{kind}:{repo}:{ref}"] += 1

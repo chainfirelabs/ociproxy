@@ -37,4 +37,8 @@ COPY --from=builder /build/third_party/ /usr/share/licenses/ociproxy/third_party
 
 EXPOSE 8080
 
+# Stdlib socket probe (no shell/curl in distroless); see ociproxy_ui.healthcheck.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD ["/usr/bin/python3", "-S", "-m", "ociproxy_ui.healthcheck"]
+
 ENTRYPOINT ["/usr/bin/python3", "-m", "ociproxy_ui"]

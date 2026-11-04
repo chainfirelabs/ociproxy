@@ -133,6 +133,10 @@ what an earlier install stored (so upgrades keep it), else random.
   value: {{ .Values.config.logFormat | quote }}
 - name: OCIPROXY_CONFIG
   value: /app/ociproxy.toml
+{{- if or .Values.trustedCA.configMapName .Values.trustedCA.secretName }}
+- name: OCIPROXY_CA_PATH
+  value: /etc/ociproxy/trust
+{{- end }}
 - name: OCIPROXY_MANAGED_SOURCES
   value: {{ .Values.config.managedSources | quote }}
 {{- with .Values.config.extraEnv }}
@@ -167,6 +171,28 @@ livenessProbe:
   readOnly: true
 - name: tmp
   mountPath: /tmp
+{{- if or .Values.trustedCA.configMapName .Values.trustedCA.secretName }}
+- name: trusted-ca
+  mountPath: /etc/ociproxy/trust
+  readOnly: true
+{{- end }}
+{{- end -}}
+
+{{/* Volume for trustedCA (a ConfigMap or Secret of PEM CA certificates). */}}
+{{- define "ociproxy.trustedCAVolume" -}}
+{{- $t := .Values.trustedCA -}}
+{{- if and $t.configMapName $t.secretName -}}
+{{- fail "set only one of trustedCA.configMapName and trustedCA.secretName" -}}
+{{- end -}}
+{{- if $t.configMapName }}
+- name: trusted-ca
+  configMap:
+    name: {{ $t.configMapName }}
+{{- else if $t.secretName }}
+- name: trusted-ca
+  secret:
+    secretName: {{ $t.secretName }}
+{{- end }}
 {{- end -}}
 
 {{- define "ociproxy.podChecksums" -}}

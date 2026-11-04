@@ -33,6 +33,7 @@ def _b64(data: bytes) -> str:
 class FakeOIDC:
     def __init__(self):
         self.port = 0
+        self.scheme = "http"
         self.user = {"sub": "u-1", "preferred_username": "olga", "groups": ["registry-users"]}
         self.claim_overrides: dict = {}  # applied to the id_token (tamper tests)
         self.groups_in_userinfo_only = False
@@ -47,10 +48,10 @@ class FakeOIDC:
 
     @property
     def issuer(self) -> str:
-        return f"http://127.0.0.1:{self.port}/application/o/registry"
+        return f"{self.scheme}://127.0.0.1:{self.port}/application/o/registry"
 
     async def discovery(self, request: Request) -> Response:
-        base = f"http://127.0.0.1:{self.port}"
+        base = f"{self.scheme}://127.0.0.1:{self.port}"
         return JSONResponse({
             "issuer": self.issuer + "/",
             "authorization_endpoint": f"{base}/authorize",
@@ -94,15 +95,18 @@ class FakeOIDC:
             return Response(status_code=401)
         return JSONResponse(self.user)
 
-    def start(self) -> None:
+    def start(self, ssl_certfile: str | None = None, ssl_keyfile: str | None = None) -> None:
         import socket
 
         s = socket.socket()
         s.bind(("127.0.0.1", 0))
         self.port = s.getsockname()[1]
         s.close()
+        if ssl_certfile:
+            self.scheme = "https"
         self._server = uvicorn.Server(uvicorn.Config(self.app, host="127.0.0.1", port=self.port,
-                                                     log_level="warning"))
+                                                     log_level="warning", ssl_certfile=ssl_certfile,
+                                                     ssl_keyfile=ssl_keyfile))
         threading.Thread(target=self._server.run, daemon=True).start()
         deadline = time.time() + 10
         while not self._server.started:

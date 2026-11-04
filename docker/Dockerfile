@@ -46,4 +46,8 @@ COPY --from=builder --chown=65532:65532 /staged-root/ /
 
 EXPOSE 5000
 
+# Stdlib socket probe (no shell/curl in distroless); see ociproxy.healthcheck.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD ["/usr/bin/python3", "-S", "-m", "ociproxy.healthcheck"]
+
 ENTRYPOINT ["/usr/bin/python3", "-m", "ociproxy.cli", "serve"]

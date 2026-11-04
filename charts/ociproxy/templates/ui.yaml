@@ -86,6 +86,10 @@ spec:
             {{- end }}
             {{- end }}
             {{- end }}
+            {{- if or .Values.trustedCA.configMapName .Values.trustedCA.secretName }}
+            - name: OCIPROXY_CA_PATH
+              value: /etc/ociproxy/trust
+            {{- end }}
             {{- with $ui.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -99,6 +103,11 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            {{- if or .Values.trustedCA.configMapName .Values.trustedCA.secretName }}
+            - name: trusted-ca
+              mountPath: /etc/ociproxy/trust
+              readOnly: true
+            {{- end }}
           {{- with $ui.resources }}
           resources:
             {{- toYaml . | nindent 12 }}
@@ -106,6 +115,7 @@ spec:
       volumes:
         - name: tmp
           emptyDir: {}
+        {{- include "ociproxy.trustedCAVolume" . | nindent 8 }}
       {{- with $ui.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

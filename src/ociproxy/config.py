@@ -15,6 +15,7 @@ import math
 import re
 import socket
 from dataclasses import dataclass, field
+from urllib.parse import urlsplit
 
 import tomllib
 
@@ -24,6 +25,10 @@ ENV_PREFIX = "OCIPROXY_"
 _NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 
 VISIBILITIES = ("public", "private")
+
+# Docker Hub's API host differs from the registry name clients use (docker.io).
+_DOCKER_HUB_HOSTS = {h: "docker.io" for h in
+                     ("docker.io", "index.docker.io", "registry-1.docker.io", "registry.hub.docker.com")}
 
 
 def _visibility(value, where: str, *, required: bool = False) -> str | None:
@@ -110,6 +115,9 @@ class Config:
     # picks up HTTP_PROXY / HTTPS_PROXY / NO_PROXY from the environment.
     # Internal node-to-node traffic is NEVER proxied.
     upstream_proxy: str | None = None
+    # Extra CAs (PEM file or directory) trusted for outbound HTTPS, on top of
+    # the public bundle: replication and upstream fetches. See tls.py.
+    ca_path: str | None = None
     # Visibility of anything no access rule / upstream / helm repo sets:
     # "public" (anonymous pulls) or "private" (any signed-in user).
     default_visibility: str = "public"
@@ -141,6 +149,19 @@ class Config:
             if u.prefix == prefix:
                 return u
         return None
+
+    def upstream_for_registry(self, host: str) -> UpstreamConfig | None:
+        """The source serving registry ``host``, as named by a mirroring
+        client's ``ns`` query parameter (Docker sends ns=docker.io, containerd
+        ns=<registry host>). Public sources win over private ones."""
+        host = _DOCKER_HUB_HOSTS.get(host.lower(), host.lower())
+        matches = []
+        for u in self.upstreams:
+            netloc = (urlsplit(u.base_url).netloc or "").lower()
+            if _DOCKER_HUB_HOSTS.get(netloc, netloc) == host:
+                matches.append(u)
+        matches.sort(key=lambda u: u.visibility != "public")
+        return matches[0] if matches else None
 
     def default_upstream(self) -> UpstreamConfig | None:
         for u in self.upstreams:
@@ -370,6 +391,10 @@ def load_config(
         raise ValueError(f"OCIPROXY_MANAGED_SOURCES must be true or false, got {managed!r}")
 
     upstream_proxy = _env("UPSTREAM_PROXY") or network.get("upstream_proxy")
+    ca_path = _env("CA_PATH") or network.get("ca_path") or None
+    if ca_path:
+        from .tls import ca_files
+        ca_files(ca_path)  # fail at startup, not on the first replication call
 
     env_upstreams = _env("UPSTREAMS")
 
@@ -399,6 +424,7 @@ def load_config(
         port=port,
         secret=secret,
         upstream_proxy=upstream_proxy,
+        ca_path=ca_path,
         default_visibility=default_visibility,
         access_rules=access_rules,
         upload_idle_timeout=upload_idle_timeout,
