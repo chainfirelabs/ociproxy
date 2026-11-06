@@ -8,7 +8,7 @@ volumes. Do not mix legacy nodes with public-v2 nodes.
 ## Primary
 
 Images are published to [GitHub Container Registry](https://github.com/chainfirelabs/ociproxy/pkgs/container/ociproxy)
-as `ghcr.io/chainfirelabs/ociproxy:1.0.2` and `ghcr.io/chainfirelabs/ociproxy/ui:1.0.2`.
+as `ghcr.io/chainfirelabs/ociproxy:1.0.3` and `ghcr.io/chainfirelabs/ociproxy/ui:1.0.3`.
 The chart defaults to both (its `appVersion`); set `image.tag` and
 `ui.image.tag` together to pin another version.
 The [README](../README.md#install-with-helm) has complete production values

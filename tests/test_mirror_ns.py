@@ -125,6 +125,92 @@ async def test_mirror_respects_source_visibility_and_unknown_registry(tmp_path, 
         node.stop()
 
 
+OCI_INDEX = "application/vnd.oci.image.index.v1+json"
+
+
+def _referrers_index(subject: str, *artifact_types: str) -> bytes:
+    return json.dumps({"schemaVersion": 2, "mediaType": OCI_INDEX, "manifests": [
+        {"mediaType": "application/vnd.oci.image.manifest.v1+json",
+         "digest": "sha256:" + f"{i:x}" * 64, "size": 100, "artifactType": t}
+        for i, t in enumerate(artifact_types, start=1)
+    ]}).encode()
+
+
+async def test_mirror_referrers_is_200_empty_index_not_404(tmp_path, fake_upstream):
+    """Docker's mirror pull asks for referrers after the manifest. A 404 makes
+    the daemon retry on registry-1.docker.io, which stalls offline hosts for
+    the connect timeout (30s) on every pull. With no referrers, the answer is
+    an empty index."""
+    node = _private_node(tmp_path, "mirror-ref", [_hub(fake_upstream)])
+    ns = {"ns": f"127.0.0.1:{fake_upstream.port}"}
+    try:
+        img = fake_upstream.install_image(repo="library/alpine", tag="latest")
+        async with httpx.AsyncClient(trust_env=False, timeout=30, base_url=node.url) as c:
+            for repo in ("library/alpine", "library/never-heard-of-it"):
+                r = await c.get(f"/v2/{repo}/referrers/{img['manifest']}", params=ns)
+                assert r.status_code == 200, r.text
+                assert r.headers["content-type"] == OCI_INDEX
+                assert r.json() == {"schemaVersion": 2, "mediaType": OCI_INDEX, "manifests": []}
+            r = await c.head(f"/v2/library/alpine/referrers/{img['manifest']}", params=ns)
+            assert r.status_code == 200 and r.headers["content-type"] == OCI_INDEX
+            # the prefixed path behaves the same
+            r = await c.get(f"/v2/hub/library/alpine/referrers/{img['manifest']}")
+            assert r.status_code == 200 and r.json()["manifests"] == []
+            r = await c.get("/v2/library/alpine/referrers/sha256:nothex", params=ns)
+            assert r.status_code == 400
+            r = await c.delete(f"/v2/library/alpine/referrers/{img['manifest']}", params=ns, auth=AUTH)
+            assert r.status_code == 405
+    finally:
+        node.stop()
+
+
+async def test_mirror_referrers_come_from_the_tag_schema(tmp_path, fake_upstream):
+    node = _private_node(tmp_path, "mirror-ref-tag", [_hub(fake_upstream)])
+    ns = {"ns": f"127.0.0.1:{fake_upstream.port}"}
+    try:
+        img = fake_upstream.install_image(repo="library/alpine", tag="latest")
+        tag = "sha256-" + img["manifest"].split(":", 1)[1]
+        fake_upstream.add_manifest("library/alpine", tag, OCI_INDEX, _referrers_index(
+            img["manifest"], "application/vnd.dev.sigstore.bundle+json", "application/spdx+json"))
+        async with httpx.AsyncClient(trust_env=False, timeout=30, base_url=node.url) as c:
+            r = await c.get(f"/v2/library/alpine/referrers/{img['manifest']}", params=ns)
+            assert r.status_code == 200, r.text
+            assert [m["artifactType"] for m in r.json()["manifests"]] == [
+                "application/vnd.dev.sigstore.bundle+json", "application/spdx+json"]
+            assert "oci-filters-applied" not in r.headers
+            r = await c.get(f"/v2/library/alpine/referrers/{img['manifest']}",
+                            params={**ns, "artifactType": "application/spdx+json"})
+            assert [m["artifactType"] for m in r.json()["manifests"]] == ["application/spdx+json"]
+            assert r.headers["oci-filters-applied"] == "artifactType"
+    finally:
+        node.stop()
+
+
+async def test_referrers_respect_visibility_and_local_pushes(tmp_path, fake_upstream):
+    hub = replace(_hub(fake_upstream), sharing="local", visibility="private")
+    node = _private_node(tmp_path, "ref-priv", [hub])
+    ns = {"ns": f"127.0.0.1:{fake_upstream.port}"}
+    subject = "sha256:" + "a" * 64
+    try:
+        async with httpx.AsyncClient(trust_env=False, timeout=30, base_url=node.url) as c:
+            assert (await c.get(f"/v2/grafana/grafana/referrers/{subject}", params=ns)).status_code == 401
+            r = await c.get(f"/v2/grafana/grafana/referrers/{subject}", params=ns, auth=AUTH)
+            assert r.status_code == 200 and r.json()["manifests"] == []
+            # a pushed referrers tag (written by clients such as oras/cosign)
+            body = _referrers_index(subject, "application/vnd.example+json")
+            r = await c.put(f"/v2/team/app/manifests/sha256-{'a' * 64}", content=body,
+                            headers={"content-type": OCI_INDEX}, auth=AUTH)
+            assert r.status_code == 201, r.text
+            assert (await c.get(f"/v2/team/app/referrers/{subject}")).status_code == 401
+            r = await c.get(f"/v2/team/app/referrers/{subject}", auth=AUTH)
+            assert [m["artifactType"] for m in r.json()["manifests"]] == ["application/vnd.example+json"]
+            # never served to mirror requests for the upstream's team/app
+            r = await c.get(f"/v2/team/app/referrers/{subject}", params=ns, auth=AUTH)
+            assert r.status_code == 200 and r.json()["manifests"] == []
+    finally:
+        node.stop()
+
+
 def test_upstream_for_registry_maps_docker_hub_and_prefers_public():
     hub_private = UpstreamConfig(name="hubauth", base_url="https://registry-1.docker.io",
                                  prefix="hubauth", visibility="private")

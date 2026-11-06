@@ -24,7 +24,7 @@ x-runtime: &runtime
 services:
   registry:
     <<: *runtime
-    image: ${OCIPROXY_IMAGE:-ghcr.io/chainfirelabs/ociproxy:1.0.2}
+    image: ${OCIPROXY_IMAGE:-ghcr.io/chainfirelabs/ociproxy:1.0.3}
     mem_limit: ${REGISTRY_MEMORY_LIMIT:-1g}
     environment:
       OCIPROXY_ROLE: replica
@@ -76,7 +76,7 @@ services:
 
   ui:
     <<: *runtime
-    image: ${OCIPROXY_UI_IMAGE:-ghcr.io/chainfirelabs/ociproxy/ui:1.0.2}
+    image: ${OCIPROXY_UI_IMAGE:-ghcr.io/chainfirelabs/ociproxy/ui:1.0.3}
     mem_limit: ${UI_MEMORY_LIMIT:-256m}
     depends_on:
       registry:

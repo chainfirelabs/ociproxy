@@ -23,8 +23,8 @@ registry (`docker pull`, Helm) and `https://<name>/` is the web UI. Traefik is
 the only container that binds host ports (80 and 443); port 80 only redirects
 to HTTPS.
 
-Both stacks pull the published images `ghcr.io/chainfirelabs/ociproxy:1.0.2` and
-`ghcr.io/chainfirelabs/ociproxy/ui:1.0.2`.
+Both stacks pull the published images `ghcr.io/chainfirelabs/ociproxy:1.0.3` and
+`ghcr.io/chainfirelabs/ociproxy/ui:1.0.3`.
 
 ### Requirements
 
@@ -232,7 +232,7 @@ each node's folder:
 2. In `.env`, replace `REGISTRY_PUBLIC_URL` and `UI_PUBLIC_URL` with
    `OCIPROXY_HOST` (just the name), remove `BIND_ADDRESS`, `REGISTRY_PORT` and
    `UI_PORT`, add `TRAEFIK_IMAGE=traefik:v3.7.17`, and set both image tags to
-   `1.0.2`. Compare with the new `.env` example.
+   `1.0.3`. Compare with the new `.env` example.
 3. Set up a [TLS certificate](#tls-certificates), and stop the host reverse
    proxy that used to front the node, so ports 80 and 443 are free.
 4. Run `docker compose up -d`.
@@ -265,11 +265,11 @@ keeps upgrades of the chart and the images separate:
 ```yaml
 image:
   repository: ghcr.io/chainfirelabs/ociproxy
-  tag: "1.0.2"
+  tag: "1.0.3"
 ui:
   image:
     repository: ghcr.io/chainfirelabs/ociproxy/ui
-    tag: "1.0.2"
+    tag: "1.0.3"
 config:
   # Signed-in users only, unless a source or [access] rule says otherwise.
   defaultVisibility: private

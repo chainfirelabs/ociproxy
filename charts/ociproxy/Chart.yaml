@@ -2,6 +2,6 @@ apiVersion: v2
 name: ociproxy
 description: Primary/replica pull-through container registry and Helm chart mirror
 type: application
-version: 0.7.1
-appVersion: "1.0.2"
+version: 0.7.2
+appVersion: "1.0.3"
 keywords: [registry, oci, docker, helm, mirror, proxy]

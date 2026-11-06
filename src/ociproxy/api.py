@@ -46,6 +46,7 @@ from .upstream import UpstreamClient
 log = logging.getLogger("ociproxy.api")
 
 REGISTRY_VERSION_HEADER = ("Docker-Distribution-Api-Version", "registry/2.0")
+OCI_INDEX = "application/vnd.oci.image.index.v1+json"
 
 
 def registry_error(status: int, code: str, message: str, headers: dict | None = None) -> JSONResponse:
@@ -504,6 +505,13 @@ class App:
                 return await self.list_tags(request, rest[: -len("/tags/list")])
             return registry_error(405, "UNSUPPORTED", f"{method} not allowed on tags")
 
+        if "/referrers/" in rest:
+            head, digest = rest.rsplit("/referrers/", 1)
+            if "/" not in digest:  # else a repo with a "referrers" path segment
+                if method in ("GET", "HEAD"):
+                    return await self.list_referrers(request, head, digest)
+                return registry_error(405, "UNSUPPORTED", f"{method} not allowed on referrers")
+
         if "/manifests/" in rest:
             head, ref = rest.rsplit("/manifests/", 1)
             if method in ("GET", "HEAD"):
@@ -560,6 +568,66 @@ class App:
             headers["Link"] = (f'</v2/{quote(head, safe="/")}/tags/list?n={n}'
                                f'&last={quote(tags[-1], safe="")}>; rel="next"')
         return JSONResponse({"name": head, "tags": tags}, headers=headers)
+
+    async def list_referrers(self, request: Request, head: str, digest: str) -> Response:
+        """OCI referrers API, answered from the referrers tag schema.
+
+        Always 200 with an image index, never 404. A 404 tells a client the
+        API is unsupported, and a registry-mirror client (Docker with
+        registry-mirrors, containerd hosts.toml) then retries the request on
+        the next host: the real registry. On a host without internet access
+        that retry stalls every pull until its connection times out.
+
+        This node does not index pushed manifests by subject, so referrers
+        live where OCI clients write them for such registries: the index
+        tagged ``<alg>-<hex>``. That tag is resolved like any other (cached,
+        revalidated, from the source for mirrored repos); when it does not
+        exist the answer is an empty index.
+        """
+        if (denied := await self.authorize_pull(request, head)) is not None:
+            return denied
+        try:
+            alg, hexpart = parse_digest(digest)
+        except ValueError:
+            return registry_error(400, "DIGEST_INVALID", f"malformed digest {digest!r}")
+        manifests = await self._referrers_from_tag(head, f"{alg}-{hexpart}")
+        headers = {REGISTRY_VERSION_HEADER[0]: REGISTRY_VERSION_HEADER[1]}
+        artifact_type = request.query_params.get("artifactType")
+        if artifact_type:
+            manifests = [m for m in manifests if m.get("artifactType") == artifact_type]
+            headers["OCI-Filters-Applied"] = "artifactType"
+        body = json.dumps({"schemaVersion": 2, "mediaType": OCI_INDEX,
+                           "manifests": manifests}).encode()
+        if request.method == "HEAD":
+            return Response(status_code=200, headers={
+                **headers, "content-type": OCI_INDEX, "content-length": str(len(body))})
+        return Response(body, media_type=OCI_INDEX, headers=headers)
+
+    async def _referrers_from_tag(self, head: str, tag: str) -> list[dict]:
+        """Descriptors in the referrers tag schema index, or [] if there is
+        none. A referrers lookup never fails a pull, so source errors count
+        as "no referrers"."""
+        upstream, repo = self.resolve_namespace(head)
+        targets = [(upstream, repo)]
+        if upstream == LOCAL and (dflt := self.config.default_upstream()) is not None:
+            targets.append((dflt.storage_name, dflt.normalize_repo(repo)))
+        for target, target_repo in targets:
+            try:
+                rec = await self.resolver.resolve_manifest(target, target_repo, tag)
+            except ResolveError as e:
+                if e.status != 404:
+                    log.debug("referrers tag %s/%s:%s unavailable (%s), answering empty",
+                              target, target_repo, tag, e.detail)
+                continue
+            try:
+                doc = json.loads(rec.bytes)
+            except ValueError:
+                return []
+            entries = doc.get("manifests") if isinstance(doc, dict) else None
+            if not isinstance(entries, list):
+                return []
+            return [m for m in entries if isinstance(m, dict)]
+        return []
 
     async def pull_manifest(self, request: Request, head: str, ref: str) -> Response:
         if (denied := await self.authorize_pull(request, head)) is not None:

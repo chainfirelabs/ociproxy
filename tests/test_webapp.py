@@ -8,6 +8,7 @@ import httpx
 import pytest
 from ociproxy_ui.app import create_app
 from ociproxy_ui.oidc import OIDCSettings
+from ociproxy_ui.tls import verify_setting
 
 from ociproxy.auth import create_user
 
@@ -416,7 +417,9 @@ async def test_oidc_provider_signed_by_internal_ca(primary, https_idp, internal_
     async with ui_client(primary.url, oidc=oidc_settings(https_idp), ca_path=str(trust)) as c:
         r = await c.get("/auth/oidc/start")
         assert r.status_code == 302, r.text
-        async with httpx.AsyncClient(verify=str(internal_ca / "ca.crt")) as browser:
+        # The browser trusts the CA like the UI does: Python 3.13+'s strict
+        # default rejects the fixture's leaf (no authorityKeyIdentifier).
+        async with httpx.AsyncClient(verify=verify_setting(str(trust))) as browser:
             r = await browser.get(r.headers["location"])
         back = urlsplit(r.headers["location"])
         r = await c.get(f"{back.path}?{back.query}")  # token + userinfo over internal-CA TLS

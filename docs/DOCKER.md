@@ -12,8 +12,8 @@ has the short install steps; this guide covers the details.
 
 Both stacks pull the published GHCR images by default:
 
-- `ghcr.io/chainfirelabs/ociproxy:1.0.2`
-- `ghcr.io/chainfirelabs/ociproxy/ui:1.0.2`
+- `ghcr.io/chainfirelabs/ociproxy:1.0.3`
+- `ghcr.io/chainfirelabs/ociproxy/ui:1.0.3`
 
 `OCIPROXY_IMAGE` and `OCIPROXY_UI_IMAGE` in the environment files set them
 explicitly. Keep both on the same version, and pin digests
